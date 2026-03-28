@@ -409,6 +409,11 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
                                        "Ensure road ahead is clear"),
   },
 
+  EventName.lateralManeuver: {
+    ET.WARNING: longitudinal_maneuver_alert,
+    ET.PERMANENT: NormalPermanentAlert("Lateral Maneuver Mode"),
+  },
+
   EventName.selfdriveInitializing: {
     ET.NO_ENTRY: NoEntryAlert("System Initializing"),
   },
@@ -1107,7 +1112,7 @@ if __name__ == '__main__':
 
   for i, alerts in EVENTS.items():
     for et, alert in alerts.items():
-      if callable(alert):
+      if not isinstance(alert, Alert):
         alert = alert(CP, CS, sm, False, 1, log.LongitudinalPersonality.standard)
       alerts_by_type[et][alert.priority].append(event_names[i])
 
