@@ -6,14 +6,11 @@ Mainly targeted at Audi/Porsche MLB vehicles.
 
 ## Current working branches:
 
-- **sp_master_mlb**  
+- **[sp_master_mlb](https://github.com/Dennis-NL/openpilot/tree/sp_master_mlb)**  
   Most up-to-date Sunnypilot branch working on MLB cars (Macan, Q5, A4, A5 B8)
-  https://github.com/Dennis-NL/openpilot/tree/sp_master_mlb
 
-- **sp_098_mlb**  
+- **[sp_098_mlb](https://github.com/Dennis-NL/openpilot/tree/sp_098_mlb)**  
   Sunnypilot openpilot version 0.9.8 working for Q5 8R
-  https://github.com/Dennis-NL/openpilot/tree/sp_098_mlb
   
-- **MLB_B8**  
+- **[MLB_B8](https://github.com/Dennis-NL/openpilot/tree/MLB_B8)**  
   Most recent version of MLB support on stock openpilot
-  https://github.com/Dennis-NL/openpilot/tree/MLB_B8
