@@ -15,5 +15,5 @@ Mainly targeted at Audi/Porsche MLB vehicles.
 - **[MLB_B8](https://github.com/Dennis-NL/openpilot/tree/MLB_B8)**  
   Most recent version of MLB support on stock openpilot
 
-- **[nightly-dev_mlb](https://github.com/Dennis-NL/openpilot/tree/nightly-dev_mlb)**  
-  Most recent version of MLB support on stock openpilot nightly
+- **[master_mlb](https://github.com/Dennis-NL/openpilot/tree/master_mlb)**  
+  Most recent version of MLB support on stock openpilot master
