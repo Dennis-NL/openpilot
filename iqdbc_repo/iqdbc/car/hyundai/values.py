@@ -26,7 +26,7 @@ class CarControllerParams:
     #([0, 9, 16, 25], [1.6, 1.0, 0.6, 0.15]),
     #([0, 9, 16, 25], [2.0, 1.2, 0.8, 0.28]),
   )
-    # Stock LFA system is seen sending 250 max, but for LKAS events it's 175 max.
+  # Stock LFA system is seen sending 250 max, but for LKAS events it's 175 max.
   # 250 can at least achieve 4 m/s^2, 80 corresponds to ~2.5 m/s^2
   ANGLE_MAX_TORQUE = 200  # The maximum amount of torque that will be allowed
   ANGLE_MIN_TORQUE = 25  # equivalent to ~0.8 m/s^2 of torque (based on ANGLE_MAX_TORQUE) when overriding
@@ -81,6 +81,28 @@ class HyundaiSafetyFlags(IntFlag):
   CANFD_LKA_STEERING_ALT = 128
   FCEV_GAS = 256
   ALT_LIMITS_2 = 512
+
+
+class HyundaiSafetyFlagsIQ:
+  DEFAULT = 0
+  ESCC = 16
+  MAIN_BTN_LONG_TOGGLE = 32
+  HAS_LDA_BUTTON = 64
+  NON_SCC = 128
+
+
+class HyundaiFlagsIQ(IntFlag):
+  ENHANCED_SCC = 1
+  HAS_LFA_BUTTON = 2
+  MAIN_BTN_LONG_TOGGLE = 2 ** 2
+  ENABLE_RADAR_TRACKS_DEPRECATED = 2 ** 3
+  LONG_TUNING_DYNAMIC = 2 ** 4
+  LONG_TUNING_PREDICTIVE = 2 ** 5
+  NON_SCC = 2 ** 6
+  NON_SCC_RADAR_FCA = 2 ** 7
+  NON_SCC_NO_FCA = 2 ** 8
+  SPEED_LIMIT_AVAILABLE = 2 ** 9
+  HAS_LKAS12 = 2 ** 10
 
 
 class HyundaiFlags(IntFlag):
@@ -467,7 +489,6 @@ class CAR(Platforms):
     HYUNDAI_SANTAFE_MX5.specs,
     flags=HyundaiFlags.ANGLE_CONTROL,
   )
-
 
   # Kia
   KIA_FORTE = HyundaiPlatformConfig(

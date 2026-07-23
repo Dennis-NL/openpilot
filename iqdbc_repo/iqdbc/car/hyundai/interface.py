@@ -1,8 +1,8 @@
 from iqdbc.car import Bus, get_safety_config, structs
 from iqdbc.car.hyundai.hyundaicanfd import CanBus
-from iqdbc.car.hyundai.values import HyundaiFlags, CAR, DBC, CANFD_RADAR_SCC_CAR, \
+from iqdbc.car.hyundai.values import HyundaiFlags, HyundaiFlagsIQ, CAR, DBC, CANFD_RADAR_SCC_CAR, \
                                                    CANFD_UNSUPPORTED_LONGITUDINAL_CAR, \
-                                                   UNSUPPORTED_LONGITUDINAL_CAR, HyundaiSafetyFlags, HyundaiExtFlags, \
+                                                   UNSUPPORTED_LONGITUDINAL_CAR, HyundaiSafetyFlags, HyundaiSafetyFlagsIQ, HyundaiExtFlags, \
                                                    CANFD_HYBRID_STATUS_ADDR, CANFD_HYBRID_STATUS_DLC, \
                                                    EV_MODE_STATUS_ADDR, EV_MODE_STATUS_DLC
 from iqdbc.car.hyundai.radar_interface import RADAR_START_ADDR
@@ -252,6 +252,14 @@ class CarInterface(CarInterfaceBase):
     # TODO: Optima Hybrid 2017 uses a different SCC12 checksum
     #ret.dashcamOnly = candidate in {CAR.KIA_OPTIMA_H, }
 
+    return ret
+
+  @staticmethod
+  def _get_params_iq(stock_cp, ret, candidate, fingerprint, car_fw, alpha_long, is_release_iq, docs):
+    del candidate, car_fw, alpha_long, is_release_iq, docs
+    if not stock_cp.flags & HyundaiFlags.CANFD and 0x391 in fingerprint[0]:
+      ret.flags |= HyundaiFlagsIQ.HAS_LFA_BUTTON
+      ret.iqSafetyFlags |= HyundaiSafetyFlagsIQ.HAS_LDA_BUTTON
     return ret
 
   @staticmethod

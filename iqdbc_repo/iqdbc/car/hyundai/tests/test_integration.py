@@ -2,7 +2,7 @@ import pytest
 
 from iqdbc.car import gen_empty_fingerprint, structs
 from iqdbc.car.hyundai.interface import CarInterface
-from iqdbc.car.hyundai.values import CAR
+from iqdbc.car.hyundai.values import CAR, HyundaiFlagsIQ, HyundaiSafetyFlagsIQ
 
 
 @pytest.mark.parametrize("candidate", list(CAR), ids=lambda candidate: candidate.value)
@@ -39,3 +39,15 @@ def test_parameter_defaults_do_not_require_persisted_fingerprint(monkeypatch, tm
 
   state, _ = interface.update([])
   assert state.vEgo == 0.0
+
+
+def test_classic_lfa_button_capability_survives_iq_module_removal(monkeypatch, tmp_path):
+  monkeypatch.setenv("PARAMS_ROOT", str(tmp_path))
+  fingerprint = gen_empty_fingerprint()
+  fingerprint[0][0x391] = 8
+
+  cp = CarInterface.get_params(CAR.HYUNDAI_SONATA, fingerprint, [], False, False, False)
+  cp_iq = CarInterface.get_params_iq(cp, CAR.HYUNDAI_SONATA, fingerprint, [], False, False, False)
+
+  assert cp_iq.flags & HyundaiFlagsIQ.HAS_LFA_BUTTON
+  assert cp_iq.iqSafetyFlags & HyundaiSafetyFlagsIQ.HAS_LDA_BUTTON
