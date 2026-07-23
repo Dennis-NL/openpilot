@@ -12,7 +12,7 @@
 ## Installation
 #### Installing Via Installer URL:
 #### Enter the following into your device custom URL box to install IQ.Pilot:
-`IQLvbs/release`
+`iqinc/release`
 #### Having Trouble? If your device is currently running AGNOS 13.1 or older, you should install latest stock openpilot, then install IQ.Pilot, or try one of the alternative methods listed below!
 
 
@@ -27,11 +27,11 @@
 
 #### Installing Via SSH:
 #### Once you are connected to your device via SSH, you can paste the following command below to install IQ.Pilot:
-`cd .. && rm -rf openpilot && git clone https://github.com/IQLvbs/openpilot.git -b release && cd openpilot && sudo reboot`
+`cd .. && rm -rf openpilot && git clone https://github.com/iqinc/openpilot.git -b release && cd openpilot && sudo reboot`
 #### If you'd like to backup your previous installation as well, paste the following command below to install IQ.Pilot:
-`cd .. && mv openpilot openpilot_backup_X && git clone https://github.com/IQLvbs/openpilot.git -b release && cd openpilot && sudo reboot`
+`cd .. && mv openpilot openpilot_backup_X && git clone https://github.com/iqinc/openpilot.git -b release && cd openpilot && sudo reboot`
 #### Alternatively, you can use your existing fork's built in tools to switch your branch as well:
-`git remote add iqpilot https://github.com/IQLvbs/openpilot.git && op switch iqpilot release`
+`git remote add iqpilot https://github.com/iqinc/openpilot.git && op switch iqpilot release`
 
 ---
 

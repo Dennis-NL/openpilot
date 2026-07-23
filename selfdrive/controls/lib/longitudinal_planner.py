@@ -31,6 +31,12 @@ LAUNCH_COMMIT_T = 3.5
 LAUNCH_MOVING_SPEED = 1.2
 LAUNCH_MAX_ACCEL = 1.5
 
+E2E_CRUISE_CONVERGENCE_TAU = 15.0
+E2E_CRUISE_ACCEL_MAX = 0.5
+E2E_MODEL_SPEED_HORIZON = 5.0
+E2E_ACCEL_INTENT_BP = [-0.05, 0.05]
+E2E_MODEL_SPEED_INTENT_BP = [-0.5, 0.0]
+
 # Lookup table for turns
 _A_TOTAL_MAX_V = [1.7, 3.2]
 _A_TOTAL_MAX_BP = [20., 40.]
@@ -67,6 +73,23 @@ def get_cruise_accel(e2e, v_cruise, v_ego, a_cruise_prev, angle_steers, CP, dt, 
 
   cruise_should_stop = v_cruise == 0.0
   return target_accel, cruise_should_stop
+
+
+def get_e2e_accel(v_ego, v_cruise, model_v, a_target, should_stop):
+  if should_stop or v_cruise <= v_ego or len(model_v) != len(T_IDXS_MPC):
+    return a_target
+
+  convergence_accel = min((v_cruise - v_ego) / E2E_CRUISE_CONVERGENCE_TAU, E2E_CRUISE_ACCEL_MAX)
+  if convergence_accel <= a_target:
+    return a_target
+
+  # Only help the model converge to cruise when both its immediate action and
+  # velocity trajectory show no active deceleration intent. The lead MPC and
+  # cruise candidates remain hard upper bounds on the final acceleration.
+  accel_intent = np.interp(a_target, E2E_ACCEL_INTENT_BP, [0.0, 1.0])
+  model_speed = np.interp(E2E_MODEL_SPEED_HORIZON, T_IDXS_MPC, model_v)
+  speed_intent = np.interp(model_speed - v_ego, E2E_MODEL_SPEED_INTENT_BP, [0.0, 1.0])
+  return float(np.interp(min(accel_intent, speed_intent), [0.0, 1.0], [a_target, convergence_accel]))
 
 
 class LongitudinalPlanner(LongitudinalPlannerIQ):
@@ -173,6 +196,8 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
     output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
     output_should_stop_e2e = sm['modelV2'].action.shouldStop
     output_a_target_e2e, output_should_stop_e2e = self.apply_e2e_stop_distance(sm, v_ego, output_a_target_e2e, output_should_stop_e2e)
+    if self.is_e2e(sm):
+      output_a_target_e2e = get_e2e_accel(v_ego, v_cruise, model_v, output_a_target_e2e, output_should_stop_e2e)
 
     if sm['carState'].standstill:
       self.launch_armed = True

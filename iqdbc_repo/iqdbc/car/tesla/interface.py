@@ -59,7 +59,10 @@ class CarInterface(CarInterfaceBase):
     if candidate == CAR.TESLA_MODEL_X:
       stock_cp.dashcamOnly = False
 
-    if 0x3DF in fingerprint[1]:
+    # Vehicle-bus messages can be slow enough to miss the initial capture window.
+    # Accept either the established 0x3DF marker or the absolute odometer frame.
+    vehicle_bus_seen = any(0x3DF in bus or 0x3B6 in bus for bus in fingerprint.values())
+    if vehicle_bus_seen:
       ret.flags |= TeslaFlagsIQ.HAS_VEHICLE_BUS.value
       ret.iqSafetyFlags |= TeslaSafetyFlagsIQ.HAS_VEHICLE_BUS
 

@@ -18,9 +18,18 @@ class CarStateExt:
     self.CP_IQ = CP_IQ
 
     self.infotainment_3_finger_press = 0
+    self.vehicle_bus_available = bool(CP_IQ.flags & TeslaFlagsIQ.HAS_VEHICLE_BUS)
 
   def update(self, ret: structs.CarState, ret_iq: structs.IQCarState, can_parsers: dict[StrEnum, CANParser]) -> None:
-    if self.CP_IQ.flags & TeslaFlagsIQ.HAS_VEHICLE_BUS:
+    if Bus.adas in can_parsers:
+      cp_adas = can_parsers[Bus.adas]
+
+      odometer_km = float(cp_adas.vl["ID3B6UI_odometer"].get("UI_odometer", 0.0))
+      if 0.0 < odometer_km < 4294967.296:
+        self.vehicle_bus_available = True
+        ret.odometer = odometer_km
+
+    if self.vehicle_bus_available and Bus.adas in can_parsers:
       cp_adas = can_parsers[Bus.adas]
 
       prev_infotainment_3_finger_press = self.infotainment_3_finger_press
@@ -66,7 +75,9 @@ class CarStateExt:
   def get_parser(CP: structs.CarParams, CP_IQ: structs.IQCarParams) -> dict[StrEnum, CANParser]:
     messages = {}
 
-    if CP_IQ.flags & TeslaFlagsIQ.HAS_VEHICLE_BUS:
+    if Bus.adas in DBC[CP.carFingerprint]:
+      # Parse the absolute odometer even if the initial fingerprint missed a
+      # slow vehicle-bus marker. Runtime data latches support safely.
       messages[Bus.adas] = CANParser(DBC[CP.carFingerprint][Bus.adas], [], CANBUS.vehicle)
 
     return messages

@@ -9,12 +9,14 @@ except ImportError:
     pass
 
   class ParamKeyFlag(IntFlag):
-    PERSISTENT = 1
-    CLEAR_ON_MANAGER_START = 2
-    CLEAR_ON_ONROAD_TRANSITION = 4
-    CLEAR_ON_OFFROAD_TRANSITION = 8
-    DONT_LOG = 16
-    DEVELOPMENT_ONLY = 32
+    # must stay in lockstep with enum ParamKeyFlag in common/params.h
+    PERSISTENT = 0x02
+    CLEAR_ON_MANAGER_START = 0x04
+    CLEAR_ON_ONROAD_TRANSITION = 0x08
+    CLEAR_ON_OFFROAD_TRANSITION = 0x10
+    DONT_LOG = 0x20
+    DEVELOPMENT_ONLY = 0x40
+    CLEAR_ON_IGNITION_ON = 0x80
     ALL = 0xFFFFFFFF
 
   class ParamKeyType(IntEnum):

@@ -43,10 +43,7 @@ struct EncoderSettings {
   }
 
   static EncoderSettings QcamEncoderSettings() {
-    // qcamera.ts is the small "dashcam" copy uploaded to konn3kt. Stock 256kbps @ 526x330 is potato;
-    // bump the bitrate to match the higher resolution below. Still H264/.ts (web/HLS compatible) and
-    // ~1/4 the bitrate of fcamera.hevc, so the file stays small. Override with QCAM_BITRATE if needed.
-    int _qcam_bitrate = getenv("QCAM_BITRATE") ? atoi(getenv("QCAM_BITRATE")) : 1'600'000;
+    int _qcam_bitrate = getenv("QCAM_BITRATE") ? atoi(getenv("QCAM_BITRATE")) : 3'200'000;
     return EncoderSettings{.encode_type = cereal::EncodeIndex::Type::QCAMERA_H264, .bitrate = _qcam_bitrate, .gop_size = 15};
   }
 
@@ -140,8 +137,8 @@ const EncoderInfo qcam_encoder_info = {
   .filename = "qcamera.ts",
   .cbr = true,           // enforce the bitrate so upload size stays predictable (no VBR overshoot)
   .get_settings = [](int){return EncoderSettings::QcamEncoderSettings();},
-  .frame_width = 1052,   // 2x the stock 526x330, same road-cam aspect ratio
-  .frame_height = 660,
+  .frame_width = 1578,   // 3x the stock 526x330, same road-cam aspect ratio
+  .frame_height = 990,
   .include_audio = Params().getBool("RecordAudio"),
   INIT_ENCODE_FUNCTIONS(QRoadEncode),
 };

@@ -209,6 +209,8 @@ struct CarState {
   lateralAvailable @61 :Bool;        # lateral control is available even if cruise is faulted
   cruiseFaultLateralMode @62 :Bool;  # cruise is faulted but lateral control is still active
   radarDisableFailed @66 :Bool;
+  # Physical vehicle odometer in kilometers. Zero means unavailable on this platform.
+  odometer @67 :Float64;
 
   # cruise state
   cruiseState @10 :CruiseState;
