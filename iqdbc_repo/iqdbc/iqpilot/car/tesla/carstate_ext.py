@@ -75,9 +75,9 @@ class CarStateExt:
   def get_parser(CP: structs.CarParams, CP_IQ: structs.IQCarParams) -> dict[StrEnum, CANParser]:
     messages = {}
 
-    if Bus.adas in DBC[CP.carFingerprint]:
-      # Parse the absolute odometer even if the initial fingerprint missed a
-      # slow vehicle-bus marker. Runtime data latches support safely.
+    # Only tap the vehicle bus on cars where fingerprinting saw it: an always-on
+    # bus-1 parser trips bus_timeout -> canBusMissing on harnesses without the tap.
+    if CP_IQ.flags & TeslaFlagsIQ.HAS_VEHICLE_BUS and Bus.adas in DBC[CP.carFingerprint]:
       messages[Bus.adas] = CANParser(DBC[CP.carFingerprint][Bus.adas], [], CANBUS.vehicle)
 
     return messages
