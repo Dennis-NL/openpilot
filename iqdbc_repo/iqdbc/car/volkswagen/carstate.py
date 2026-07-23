@@ -293,7 +293,7 @@ class CarState(CarStateBase):
 
     ret.fuelGauge = pt_cp.vl["Kombi_02"]["KBI_Inhalt_Tank"] / 55.0
     ret.fuelTankLevelL = pt_cp.vl["Kombi_02"]["KBI_Inhalt_Tank"]  # raw liters for konn3kt
-    self._update_odometer(ret, aux_cp.vl["Kombi_02"]["KBI_Kilometerstand"])
+    self._update_odometer(ret, pt_cp.vl["Kombi_02"]["KBI_Kilometerstand"])
 
     self.cruise_faulted = ret.accFaulted
     self._apply_iq_private_flags(ret_iq)

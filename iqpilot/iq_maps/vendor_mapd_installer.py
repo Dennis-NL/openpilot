@@ -2,16 +2,15 @@
 """
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
 
-Installs the `mapd` binary by Jacob Pfeifer (github.com/pfeiferj/mapd) — the binary is his work.
+Provisions the `mapd` routing binary authored by Jacob Pfeifer (github.com/pfeiferj/mapd).
+The binary itself is his work; this module only fetches, verifies and stages it on-device.
 """
 import hashlib
 import logging
 import os
 import stat
 import time
-import traceback
 from pathlib import Path
-from urllib.request import urlopen
 
 import requests
 
@@ -29,26 +28,23 @@ VENDOR_RELEASE_URL = f"https://github.com/pfeiferj/mapd/releases/download/{VENDO
 
 _VERSION_PARAM = "MapdVersion"
 _HASH_FILE = os.path.join(BASEDIR, "iqpilot", "iq_maps", "tests", "mapd_hash")
-_DOWNLOAD_TIMEOUT_S = 60
-_MAX_DOWNLOAD_TRIES = 5
+_HTTP_TIMEOUT_S = 60
+_FETCH_ATTEMPTS = 5
+_NET_PROBE_ATTEMPTS = 10
+_NET_PROBE_INTERVAL_S = 2
 
 
 def get_file_hash(path: str) -> str:
-  """Hex SHA-256 of a file's contents."""
+  """Hex SHA-256 digest of a file on disk."""
+  digest = hashlib.sha256()
   with open(path, "rb") as handle:
-    return hashlib.file_digest(handle, "sha256").hexdigest()
+    for block in iter(lambda: handle.read(1 << 20), b""):
+      digest.update(block)
+  return digest.hexdigest()
 
 
 def stamp_vendor_version(version: str, params: Params | None = None) -> None:
   (params or Params()).put(_VERSION_PARAM, version)
-
-
-def _pinned_hash() -> str:
-  try:
-    with open(_HASH_FILE) as f:
-      return f.read().strip()
-  except OSError:
-    return ""
 
 
 class VendorMapdInstaller:
@@ -56,98 +52,120 @@ class VendorMapdInstaller:
     self._spinner = spinner_ref
     self._params = Params()
 
+  # --- externally consumed surface -----------------------------------------
   def get_installed_version(self) -> str:
     return str(self._params.get(_VERSION_PARAM) or "")
 
   @staticmethod
   def ensure_directories_exist() -> None:
-    for d in (Paths.mapd_root(), VENDOR_MAPD_BIN_DIR):
-      os.makedirs(d, exist_ok=True)
-
-  def download_needed(self) -> bool:
-    if not os.path.exists(VENDOR_MAPD_PATH):
-      return True
-    if self.get_installed_version() != VENDOR_RELEASE_TAG:
-      return True
-    pinned = _pinned_hash()
-    if not pinned:
-      return False
-    try:
-      return get_file_hash(VENDOR_MAPD_PATH) != pinned
-    except OSError:
-      return True
+    for directory in (Paths.mapd_root(), VENDOR_MAPD_BIN_DIR):
+      os.makedirs(directory, exist_ok=True)
 
   def check_and_download(self) -> None:
-    if self.download_needed():
-      self.fetch()
-
-  def fetch(self) -> None:
-    self.ensure_directories_exist()
-    if self._pull_binary():
-      stamp_vendor_version(VENDOR_RELEASE_TAG, self._params)
-
-  def _pull_binary(self) -> bool:
-    scratch = Path(f"{VENDOR_MAPD_PATH}.tmp")
-    for attempt in range(1, _MAX_DOWNLOAD_TRIES + 1):
-      try:
-        resp = requests.get(VENDOR_RELEASE_URL, stream=True, timeout=_DOWNLOAD_TIMEOUT_S)
-        resp.raise_for_status()
-        with open(scratch, "wb") as out:
-          out.write(resp.content)
-          out.flush()
-          os.fsync(out.fileno())
-        mode = stat.S_IMODE(os.lstat(scratch).st_mode)
-        os.chmod(scratch, mode | stat.S_IEXEC)
-        scratch.replace(VENDOR_MAPD_PATH)
-        return True
-      except requests.exceptions.RequestException as e:
-        self._spinner.update(f"mapd download failed ({e}); retry {attempt}/{_MAX_DOWNLOAD_TRIES}")
-        time.sleep(0.5)
-    scratch.unlink(missing_ok=True)
-    logging.error("mapd binary download failed after %d attempts", _MAX_DOWNLOAD_TRIES)
-    return False
-
-  def wait_for_internet_connection(self, return_on_failure: bool = False) -> bool:
-    attempts = 10
-    for i in range(attempts + 1):
-      self._spinner.update(f"Waiting for internet connection... [{i}/{attempts}]")
-      time.sleep(2)
-      try:
-        urlopen("https://sentry.io", timeout=10)
-        return True
-      except Exception as e:  # noqa: BLE001
-        print(f"Wait for internet failed: {e}")
-        if return_on_failure and i == attempts:
-          return False
-    return False
+    if not self._binary_up_to_date():
+      self._provision()
 
   def non_prebuilt_install(self) -> None:
-    sm = messaging.SubMaster(["deviceState"])
-    if sm["deviceState"].networkMetered:
-      self._spinner.update("Can't proceed with mapd install since network is metered!")
+    if self._on_metered_link():
+      self._say("Metered connection detected — offline maps engine will not download here.")
       time.sleep(5)
       return
 
     try:
       self.ensure_directories_exist()
-      if not self.download_needed():
-        self._spinner.update("Offline maps binary is ready.")
+      if self._binary_up_to_date():
+        self._say("Offline maps engine already present and current.")
         time.sleep(0.1)
         return
 
-      if self.wait_for_internet_connection(return_on_failure=True):
-        self._spinner.update(f"Downloading vendor mapd [{self.get_installed_version()}] => [{VENDOR_RELEASE_TAG}].")
+      if self._block_until_online():
+        self._say(f"Retrieving offline maps engine [{self.get_installed_version() or 'none'}] -> [{VENDOR_RELEASE_TAG}]")
         time.sleep(0.1)
-        self.check_and_download()
+        self._provision()
       self._spinner.close()
-    except Exception:  # noqa: BLE001
-      for i in range(6):
-        self._spinner.update("Failed to download OSM maps won't work until properly downloaded!"
-                             f"Try again manually rebooting. Boot will continue in {5 - i}s...")
-        time.sleep(1)
-      sentry.init(sentry.SentryProject.SELFDRIVE)
-      traceback.print_exc()
-      sentry.capture_exception()
+    except Exception as exc:  # noqa: BLE001
+      self._announce_failure(exc)
+
+  # --- internal ------------------------------------------------------------
+  def _expected_hash(self) -> str:
+    try:
+      with open(_HASH_FILE) as f:
+        return f.read().strip()
+    except OSError:
+      return ""
+
+  def _binary_up_to_date(self) -> bool:
+    if not os.path.exists(VENDOR_MAPD_PATH):
+      return False
+    if self.get_installed_version() != VENDOR_RELEASE_TAG:
+      return False
+    reference = self._expected_hash()
+    if not reference:
+      return True
+    try:
+      return get_file_hash(VENDOR_MAPD_PATH) == reference
+    except OSError:
+      return False
+
+  def _provision(self) -> None:
+    self.ensure_directories_exist()
+    if self._retrieve_binary():
+      stamp_vendor_version(VENDOR_RELEASE_TAG, self._params)
+
+  def _retrieve_binary(self) -> bool:
+    staging = Path(f"{VENDOR_MAPD_PATH}.part")
+    last_error: Exception | None = None
+    for attempt in range(1, _FETCH_ATTEMPTS + 1):
+      try:
+        with requests.get(VENDOR_RELEASE_URL, stream=True, timeout=_HTTP_TIMEOUT_S) as resp:
+          resp.raise_for_status()
+          with open(staging, "wb") as out:
+            for chunk in resp.iter_content(chunk_size=1 << 16):
+              out.write(chunk)
+            out.flush()
+            os.fsync(out.fileno())
+        os.chmod(staging, os.lstat(staging).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        staging.replace(VENDOR_MAPD_PATH)
+        return True
+      except requests.exceptions.RequestException as exc:
+        last_error = exc
+        self._say(f"offline maps fetch attempt {attempt}/{_FETCH_ATTEMPTS} did not complete ({exc})")
+        time.sleep(0.5)
+    staging.unlink(missing_ok=True)
+    logging.error("offline maps engine could not be fetched after %d attempts: %s", _FETCH_ATTEMPTS, last_error)
+    return False
+
+  def _on_metered_link(self) -> bool:
+    sm = messaging.SubMaster(["deviceState"])
+    return bool(sm["deviceState"].networkMetered)
+
+  def _block_until_online(self) -> bool:
+    for i in range(1, _NET_PROBE_ATTEMPTS + 1):
+      self._say(f"Waiting for a usable network connection... [{i}/{_NET_PROBE_ATTEMPTS}]")
+      if self._link_reachable():
+        return True
+      time.sleep(_NET_PROBE_INTERVAL_S)
+    return False
+
+  @staticmethod
+  def _link_reachable() -> bool:
+    try:
+      requests.head(VENDOR_RELEASE_URL, timeout=10, allow_redirects=True)
+      return True
+    except requests.exceptions.RequestException as exc:
+      logging.debug("network probe failed: %s", exc)
+      return False
+
+  def _announce_failure(self, exc: Exception) -> None:
+    for remaining in range(5, 0, -1):
+      self._say(f"Offline maps engine unavailable; navigation stays online-only. Boot continues in {remaining}s...")
+      time.sleep(1)
+    logging.exception("vendor mapd install failed")
+    sentry.init(sentry.SentryProject.SELFDRIVE)
+    sentry.capture_exception(exc)
+
+  def _say(self, text: str) -> None:
+    self._spinner.update(text)
 
 
 if __name__ == "__main__":
@@ -155,9 +173,9 @@ if __name__ == "__main__":
   installer = VendorMapdInstaller(spinner)
   installer.ensure_directories_exist()
   if is_prebuilt():
-    spinner.update(f"[DEBUG] Prebuilt build; no vendor mapd install required. "
-                   f"VERSION: [{VENDOR_RELEASE_TAG}], Param [{installer.get_installed_version()}]")
+    spinner.update(f"[DEBUG] Prebuilt build; vendor mapd install skipped. "
+                   f"target [{VENDOR_RELEASE_TAG}], param [{installer.get_installed_version()}]")
     stamp_vendor_version(VENDOR_RELEASE_TAG)
   else:
-    spinner.update(f"Checking if vendor mapd is installed and valid. Prebuilt [{is_prebuilt()}]")
+    spinner.update(f"Verifying vendor mapd install. prebuilt [{is_prebuilt()}]")
     installer.non_prebuilt_install()
