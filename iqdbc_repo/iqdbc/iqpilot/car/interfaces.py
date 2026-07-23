@@ -8,11 +8,7 @@ from collections.abc import Callable
 
 from iqdbc.car import structs
 from iqdbc.car.can_definitions import CanRecvCallable, CanSendCallable
-from iqdbc.car.hyundai.values import HyundaiFlags
 from iqdbc.car.subaru.values import SubaruFlags
-from iqdbc.iqpilot.car.hyundai.enable_radar_tracks import enable_radar_tracks as hyundai_enable_radar_tracks
-from iqdbc.iqpilot.car.hyundai.longitudinal.helpers import LongitudinalTuningType
-from iqdbc.iqpilot.car.hyundai.values import HyundaiFlagsIQ
 from iqdbc.iqpilot.car.subaru.values_ext import SubaruFlagsIQ, SubaruSafetyFlagsIQ
 from iqdbc.iqpilot.car.tesla.values import TeslaFlagsIQ
 from iqdbc.iqpilot.car.toyota.values import ToyotaFlagsIQ
@@ -81,23 +77,12 @@ def setup_interfaces(CI, CP: structs.CarParams, CP_IQ: structs.IQCarParams,
 
   _initialize_custom_longitudinal_tuning(CI, CP, CP_IQ, params_dict)
   _initialize_coop_steering(CP, CP_IQ, params_dict)
-  _initialize_radar_tracks(CP, CP_IQ, can_recv, can_send)
   _initialize_stop_and_go(CP, CP_IQ, params_dict)
   _initialize_toyota(CP, CP_IQ, params_dict)
 
 
 def _initialize_custom_longitudinal_tuning(CI, CP: structs.CarParams, CP_IQ: structs.IQCarParams,
                                            params_dict: dict[str, str]) -> None:
-
-  # HKG longitudinal tuning lineage in this port traces to Jason Wen, James
-  # Vecellio-Grant, and carrotpilot; keep that attribution with this path.
-  # Hyundai Custom Longitudinal Tuning
-  if CP.brand == 'hyundai':
-    hyundai_longitudinal_tuning = int(params_dict.get("HyundaiLongitudinalTuning", 0))
-    if hyundai_longitudinal_tuning == LongitudinalTuningType.DYNAMIC:
-      CP_IQ.flags |= HyundaiFlagsIQ.LONG_TUNING_DYNAMIC.value
-    if hyundai_longitudinal_tuning == LongitudinalTuningType.PREDICTIVE:
-      CP_IQ.flags |= HyundaiFlagsIQ.LONG_TUNING_PREDICTIVE.value
 
   _ = CI.get_longitudinal_tuning_iq(CP, CP_IQ)
 
@@ -108,14 +93,6 @@ def _initialize_coop_steering(CP: structs.CarParams, CP_IQ: structs.IQCarParams,
     coop_steering = int(params_dict.get("TeslaCoopSteering", 0)) == 1
     if coop_steering:
       CP_IQ.flags |= TeslaFlagsIQ.COOP_STEERING.value
-
-
-def _initialize_radar_tracks(CP: structs.CarParams, CP_IQ: structs.IQCarParams,
-                             can_recv: CanRecvCallable | None = None, can_send: CanSendCallable | None = None) -> None:
-  if CP.brand == 'hyundai':
-    if CP.flags & HyundaiFlags.MANDO_RADAR and (CP.radarUnavailable or CP_IQ.flags & HyundaiFlagsIQ.ENHANCED_SCC):
-      tracks_enabled = hyundai_enable_radar_tracks(can_recv, can_send, bus=0, addr=0x7d0)
-      CP.radarUnavailable = not tracks_enabled
 
 
 def _initialize_stop_and_go(CP: structs.CarParams, CP_IQ: structs.IQCarParams, params_dict: dict[str, str]) -> None:
