@@ -6,6 +6,7 @@ import cereal.messaging as messaging
 from iqdbc.car.interfaces import ACCEL_MIN, ACCEL_MAX
 from openpilot.common.constants import CV
 from openpilot.common.filter_simple import FirstOrderFilter
+from openpilot.common.params import Params, UnknownKeyName
 from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
@@ -92,6 +93,18 @@ def get_e2e_accel(v_ego, v_cruise, model_v, a_target, should_stop):
   return float(np.interp(min(accel_intent, speed_intent), [0.0, 1.0], [a_target, convergence_accel]))
 
 
+def get_accel_candidates(e2e, has_lead, mpc_candidate, cruise_candidate, e2e_candidate):
+  candidates = []
+  # With no lead, the MPC follows a synthetic fast lead. It remains the ACC
+  # policy, but must not limit the model policy in full E2E.
+  if not e2e or has_lead:
+    candidates.append(mpc_candidate)
+  candidates.append(cruise_candidate)
+  if e2e:
+    candidates.append(e2e_candidate)
+  return candidates
+
+
 class LongitudinalPlanner(LongitudinalPlannerIQ):
   def __init__(self, CP, CP_IQ, init_v=0.0, init_a=0.0, dt=DT_MDL):
     self.CP = CP
@@ -108,6 +121,10 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
     self.output_a_target = 0.0
     self.output_should_stop = False
     self.launch_armed = False
+    try:
+      self.exp_speed_conv = Params().get_bool("expSpeedConv")
+    except UnknownKeyName:
+      self.exp_speed_conv = False
 
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
@@ -196,7 +213,7 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
     output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
     output_should_stop_e2e = sm['modelV2'].action.shouldStop
     output_a_target_e2e, output_should_stop_e2e = self.apply_e2e_stop_distance(sm, v_ego, output_a_target_e2e, output_should_stop_e2e)
-    if self.is_e2e(sm):
+    if self.is_e2e(sm) and self.exp_speed_conv and not self.mpc.status:
       output_a_target_e2e = get_e2e_accel(v_ego, v_cruise, model_v, output_a_target_e2e, output_should_stop_e2e)
 
     if sm['carState'].standstill:
@@ -218,10 +235,13 @@ class LongitudinalPlanner(LongitudinalPlannerIQ):
                                                           steer_angle_without_offset, self.CP, self.dt,
                                                           accel_coast, self.allow_throttle)
 
-    candidates = [(output_a_target_mpc, self.mpc.source, output_should_stop_mpc),
-                  (self.a_cruise, LongitudinalPlanSource.cruise, cruise_should_stop)]
-    if e2e:
-      candidates.append((output_a_target_e2e, LongitudinalPlanSource.e2e, output_should_stop_e2e))
+    candidates = get_accel_candidates(
+      e2e,
+      self.mpc.status,
+      (output_a_target_mpc, self.mpc.source, output_should_stop_mpc),
+      (self.a_cruise, LongitudinalPlanSource.cruise, cruise_should_stop),
+      (output_a_target_e2e, LongitudinalPlanSource.e2e, output_should_stop_e2e),
+    )
 
     output_a_target, self.mpc.source, _ = min(candidates, key=lambda c: c[0])
     self.output_should_stop = any(should_stop for _, _, should_stop in candidates)

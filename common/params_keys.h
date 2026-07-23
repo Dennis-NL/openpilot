@@ -183,6 +183,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"IQE2ESetSpeedMode", {PERSISTENT, INT, "0"}},
     {"IQE2ESetSpeedUseCurrent", {PERSISTENT, BOOL, "0"}},
     {"IQE2ESetSpeedMph", {PERSISTENT, INT, "65"}},
+    {"expSpeedConv", {PERSISTENT, BOOL, "0"}},
     {"MaxTimeOffroad", {PERSISTENT, INT, "1800"}},
     {"NightMode", {PERSISTENT, BOOL, "0"}},
     {"newLeadMpc", {PERSISTENT, BOOL, "1"}},
