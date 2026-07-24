@@ -1,18 +1,24 @@
 """
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
+
+IQ.Pilot road-view HUD: extends the stock renderer and layers on the IQ overlays
+(developer bar, nav map, road name, speed + speed-limit, turn signals, rocket-fuel
+accel bar, soft warnings, steering arc).
 """
 import pyray as rl
 
 from openpilot.selfdrive.ui.mici.onroad.torque_bar import TorqueBar
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.onroad.hud_renderer import HudRenderer
-from openpilot.iqpilot.ui.onroad.hud_overlays import DeveloperUiRenderer
+from openpilot.iqpilot.ui.onroad.hud_overlays import (
+  DeveloperUiRenderer,
+  RoadNameRenderer,
+  RocketFuel,
+  SpeedLimitRenderer,
+  TurnSignalController,
+  SpeedRenderer,
+)
 from openpilot.iqpilot.ui.onroad.nav_map_panel import NavMapPanel
-from openpilot.iqpilot.ui.onroad.hud_overlays import RoadNameRenderer
-from openpilot.iqpilot.ui.onroad.hud_overlays import RocketFuel
-from openpilot.iqpilot.ui.onroad.hud_overlays import SpeedLimitRenderer
-from openpilot.iqpilot.ui.onroad.hud_overlays import TurnSignalController
-from openpilot.iqpilot.ui.onroad.hud_overlays import SpeedRenderer
 from openpilot.iqpilot.ui.onroad.soft_warning import SoftWarningRenderer
 
 ENABLE_FLOATING_NAV_MAP_PANEL = False
