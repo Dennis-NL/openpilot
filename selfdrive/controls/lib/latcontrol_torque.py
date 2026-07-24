@@ -365,8 +365,12 @@ class NeuralNetworkFeedForward(PilotLateralBrain):
     super().__init__(lac_torque, CP, CP_IQ, CI)
     self.params = Params()
     self.enabled = self.params.get_bool("NeuralNetworkFeedForward")
-    self.has_nn_model = CP_IQ.iqLateralNet.model.path != MOCK_MODEL_PATH
-    self.model = NNTorqueModel(CP_IQ.iqLateralNet.model.path)
+    # NNFF applies only when a real trained model for this car is present on disk.
+    # No models shipped (or no match / MOCK) -> skip NNFF entirely and fall back to
+    # the stock torque feed-forward. Models are re-added as they are retrained.
+    self.has_nn_model = (CP_IQ.iqLateralNet.model.path != MOCK_MODEL_PATH
+                         and os.path.isfile(CP_IQ.iqLateralNet.model.path))
+    self.model = NNTorqueModel(CP_IQ.iqLateralNet.model.path) if self.has_nn_model else None
     self.pitch = FirstOrderFilter(0.0, 0.5, 0.01)
     self.pitch_last = 0.0
 

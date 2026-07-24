@@ -102,8 +102,10 @@ def make_vw_car_state(cruise_available: bool, cruise_fault_lateral: bool = False
 def test_hyundai_lkas_button_can_arm_guidance_before_lateral_available():
   selfdrive = make_selfdrive(0, cp_iq_flags=HyundaiFlagsIQ.HAS_LFA_BUTTON)
   guidance = SteeringAssistanceBehavior(selfdrive)
+  car_state = make_car_state()
+  car_state.buttonEvents = [structs.CarState.ButtonEvent(pressed=True, type=ButtonType.lfaButton)]
 
-  guidance.update_events(make_car_state())
+  guidance.update_events(car_state)
 
   assert selfdrive.events_iq.has(EventNameIQ.alcEngaged)
 

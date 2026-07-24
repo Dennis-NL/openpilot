@@ -153,8 +153,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
 
     // --- iqpilot params --- //
     {"ApiCache_DriveStats", {PERSISTENT, JSON}},
-    {"AutoLaneChangeBsmDelay", {PERSISTENT, BOOL, "0"}},
-    {"AutoLaneChangeTimer", {PERSISTENT, INT, "0"}},
+    {"IQLaneChangeBsmDelay", {PERSISTENT, BOOL, "0"}},
+    {"IQLaneChangeTimer", {PERSISTENT, INT, "0"}},
     {"NavExitLaneChange", {PERSISTENT, BOOL, "0"}},
     {"IQBlinkerMinLateralSpeed", {PERSISTENT, INT, "20"}},  // MPH or km/h
     {"IQBlinkerPauseLateral", {PERSISTENT, INT, "0"}},
@@ -189,7 +189,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"newLeadMpc", {PERSISTENT, BOOL, "1"}},
     {"ModelRunnerTypeCache", {CLEAR_ON_ONROAD_TRANSITION, INT}},
     {"ForceOnroadUntil", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, INT, "0"}},
-    {"OffroadMode", {CLEAR_ON_MANAGER_START, BOOL}},
+    {"IQAlwaysOffroad", {CLEAR_ON_MANAGER_START, BOOL}},
     {"Offroad_TiciSupport", {CLEAR_ON_MANAGER_START, JSON}},
     {"OnroadScreenOffBrightness", {PERSISTENT, INT, "0"}},
     {"OnroadScreenOffTimer", {PERSISTENT, INT, "15"}},

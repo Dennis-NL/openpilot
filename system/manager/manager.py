@@ -50,7 +50,7 @@ def manager_init() -> None:
 
   # device boot mode
   if params.get("DeviceBootMode") == 1:  # start in Always Offroad mode
-    params.put_bool("OffroadMode", True)
+    params.put_bool("IQAlwaysOffroad", True)
 
   if params.get_bool("RecordFrontLock"):
     params.put_bool("RecordFront", True)

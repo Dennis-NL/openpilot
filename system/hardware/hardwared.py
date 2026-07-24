@@ -462,7 +462,7 @@ def hardware_thread(end_event, hw_queue) -> None:
     startup_conditions["device_booted"] = startup_conditions.get("device_booted", False) or HARDWARE.booted()
 
     # user-forced status (Always Offroad can be temporarily overridden)
-    offroad_mode = params.get_bool("OffroadMode")
+    offroad_mode = params.get_bool("IQAlwaysOffroad")
     force_onroad_until = params.get("ForceOnroadUntil", return_default=True)
     now = int(time.time())
     force_onroad_active = offroad_mode and force_onroad_until > now

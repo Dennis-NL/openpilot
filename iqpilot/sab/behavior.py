@@ -254,6 +254,7 @@ _BTN = structs.CarState.ButtonEvent.Type
 _GEAR = structs.CarState.GearShifter
 
 _CRUISE_SET_TAPS = frozenset((_BTN.accelCruise, _BTN.resumeCruise, _BTN.decelCruise, _BTN.setCruise))
+_LATERAL_TOGGLE_BUTTONS = (_BTN.lkas, _BTN.lfaButton)
 _HYUNDAI_LDA_MASK = HyundaiFlags.CANFD
 
 # While a lateral-only session rides through a pause, these stock blockers are
@@ -460,7 +461,7 @@ class SteeringAssistanceBehavior:
     for be in cs.buttonEvents:
       if be.type == _BTN.cancel and long_dropped_out:
         self._emit(_Q.speedManually)
-      if not (be.type == _BTN.lkas and be.pressed and self._lateral_offered(cs)):
+      if not (be.type in _LATERAL_TOGGLE_BUTTONS and be.pressed and self._lateral_offered(cs)):
         continue
       if not self.enabled:
         self._emit(_Q.alcEngaged)

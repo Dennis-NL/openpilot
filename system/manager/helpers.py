@@ -122,6 +122,9 @@ _RENAMED_PARAMS = {
   "BlinkerPauseLateralControl": "IQBlinkerPauseLateral",
   "BlinkerMinLateralControlSpeed": "IQBlinkerMinLateralSpeed",
   "DevUIInfo": "IQDevUIInfo",
+  "OffroadMode": "IQAlwaysOffroad",
+  "AutoLaneChangeTimer": "IQLaneChangeTimer",
+  "AutoLaneChangeBsmDelay": "IQLaneChangeBsmDelay",
 }
 
 

@@ -66,10 +66,10 @@ class SabSettingsPanel(NavScroller):
 class LaneChangePanel(NavScroller):
   def __init__(self):
     super().__init__()
-    self._timer = MappedParamToggle("Auto Lane Change", "AutoLaneChangeTimer",
+    self._timer = MappedParamToggle("Auto Lane Change", "IQLaneChangeTimer",
                                     ["off", "nudge", "nudgeless", "0.5 s", "1 s", "2 s", "3 s"],
                                     [-1, 0, 1, 2, 3, 4, 5])
-    self._bsm_delay = BigParamControl("Delay with Blind Spot", "AutoLaneChangeBsmDelay")
+    self._bsm_delay = BigParamControl("Delay with Blind Spot", "IQLaneChangeBsmDelay")
     self._continuous = BigParamControl("Continuous Changes", "LaneChangeContinuous")
     self._scroller.add_widgets([self._timer, self._bsm_delay, self._continuous])
 
@@ -77,11 +77,11 @@ class LaneChangePanel(NavScroller):
     super().show_event()
     self._timer.refresh()
     enable_bsm = bool(ui_state.CP and ui_state.CP.enableBsm)
-    if not enable_bsm and ui_state.params.get_bool("AutoLaneChangeBsmDelay"):
-      ui_state.params.remove("AutoLaneChangeBsmDelay")
+    if not enable_bsm and ui_state.params.get_bool("IQLaneChangeBsmDelay"):
+      ui_state.params.remove("IQLaneChangeBsmDelay")
     self._bsm_delay.refresh()
     self._bsm_delay.set_enabled(
-      enable_bsm and int(ui_state.params.get("AutoLaneChangeTimer", return_default=True)) > AutoLaneChangeMode.NUDGE
+      enable_bsm and int(ui_state.params.get("IQLaneChangeTimer", return_default=True)) > AutoLaneChangeMode.NUDGE
     )
     self._continuous.refresh()
 
