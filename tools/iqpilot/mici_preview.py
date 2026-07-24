@@ -165,7 +165,7 @@ def _patch_mock_state():
   mp.put("Version",         "IQ.Pilot 0.9.5-mici")
 
   # ── Models ────────────────────────────────────────────────────────────────
-  mp.put("LagdToggle",      False)
+  mp.put("IQLiveSteerDelay",      False)
   mp.put("IQLaneTurnDesire",  False)
   mp.put("IQLaneTurnValue",   "19.0")
 

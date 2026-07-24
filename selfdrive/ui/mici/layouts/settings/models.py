@@ -121,8 +121,8 @@ class ModelsLayoutMici(NavScroller):
     self._clear.set_click_callback(self._confirm_clear_cache)
     self._clear.set_enabled(lambda: ui_state.is_offroad())
 
-    self._lagd = BigParamControl("live learning steer delay", "LagdToggle")
-    self._sw_delay = MappedParamToggle("software delay", "LagdToggleDelay", _DELAY_OPTIONS, _DELAY_VALUES)
+    self._lagd = BigParamControl("live learning steer delay", "IQLiveSteerDelay")
+    self._sw_delay = MappedParamToggle("software delay", "IQSoftwareSteerDelay", _DELAY_OPTIONS, _DELAY_VALUES)
     self._sw_delay.set_visible(lambda: not self._lagd._checked)
 
     self._lane_turn = BigParamControl("use lane turn desires", "IQLaneTurnDesire")
@@ -453,7 +453,7 @@ class ModelsLayoutMici(NavScroller):
         self._lagd.set_value("")
       return
     try:
-      sw = float(ui_state.params.get("LagdToggleDelay", return_default=True))
+      sw = float(ui_state.params.get("IQSoftwareSteerDelay", return_default=True))
     except (TypeError, ValueError):
       sw = 0.2
     if ui_state.CP is not None:

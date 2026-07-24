@@ -125,6 +125,9 @@ _RENAMED_PARAMS = {
   "OffroadMode": "IQAlwaysOffroad",
   "AutoLaneChangeTimer": "IQLaneChangeTimer",
   "AutoLaneChangeBsmDelay": "IQLaneChangeBsmDelay",
+  "LagdToggle": "IQLiveSteerDelay",
+  "LagdToggleDelay": "IQSoftwareSteerDelay",
+  "LagdValueCache": "IQSteerDelayCache",
 }
 
 

@@ -829,7 +829,7 @@ class SteeringLayout(Widget):
     items = self._initialize_items()
     self._scroller = Scroller(items, line_separator=False, spacing=0)
 
-    for ctrl, key in [(self._lane_turn_value_control, "IQLaneTurnValue"), (self._delay_control, "LagdToggleDelay")]:
+    for ctrl, key in [(self._lane_turn_value_control, "IQLaneTurnValue"), (self._delay_control, "IQSoftwareSteerDelay")]:
       ctrl.action_item.set_value(int(float(ui_state.params.get(key, return_default=True)) * 100))
 
   def _initialize_items(self):
@@ -872,9 +872,9 @@ class SteeringLayout(Widget):
       lambda v: f"{int(round(v * (CV.MPH_TO_KPH if ui_state.is_metric else 1)))}"
                 f" {'km/h' if ui_state.is_metric else 'mph'}"
     )
-    self._lagd_toggle = toggle_item(tr("Live Learning Steer Delay"), "", param="LagdToggle")
+    self._lagd_toggle = toggle_item(tr("Live Learning Steer Delay"), "", param="IQLiveSteerDelay")
     self._delay_control = option_item(
-      tr("Adjust Software Delay"), "LagdToggleDelay", 5, 50,
+      tr("Adjust Software Delay"), "IQSoftwareSteerDelay", 5, 50,
       tr("Adjust the fixed software delay added to steer actuator delay when Live Learning Steer Delay is turned off. The default software delay value is 0.2 s."),
       1, None, True, "", style.BUTTON_ACTION_WIDTH, None, True, lambda v: f"{float(v):.2f}s"
     )
@@ -919,7 +919,7 @@ class SteeringLayout(Widget):
     self._nnff_toggle.action_item.set_enabled(ui_state.is_offroad() and steering_supported)
 
     turn_desire = ui_state.params.get_bool("IQLaneTurnDesire")
-    live_delay = ui_state.params.get_bool("LagdToggle")
+    live_delay = ui_state.params.get_bool("IQLiveSteerDelay")
     self._lane_turn_desire_toggle.action_item.set_state(turn_desire)
     self._lane_turn_value_control.set_visible(turn_desire)
     self._lagd_toggle.action_item.set_state(live_delay)
@@ -931,7 +931,7 @@ class SteeringLayout(Widget):
     if live_delay:
       lagd_desc += f"<br>{tr('Live Steer Delay:')} {ui_state.sm['liveDelay'].lateralDelay:.3f} s"
     elif ui_state.CP:
-      sw = float(ui_state.params.get("LagdToggleDelay", "0.2"))
+      sw = float(ui_state.params.get("IQSoftwareSteerDelay", "0.2"))
       cp = ui_state.CP.steerActuatorDelay
       lagd_desc += f"<br>{tr('Actuator Delay:')} {cp:.2f} s + {tr('Software Delay:')} {sw:.2f} s = {tr('Total Delay:')} {cp + sw:.2f} s"
     self._lagd_toggle.set_description(lagd_desc)

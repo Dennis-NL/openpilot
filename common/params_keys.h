@@ -284,9 +284,9 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
 
     // iqpilot model params
     {"CameraOffset", {PERSISTENT, FLOAT, "0.0"}},
-    {"LagdToggle", {PERSISTENT, BOOL, "1"}},
-    {"LagdToggleDelay", {PERSISTENT, FLOAT, "0.2"}},
-    {"LagdValueCache", {PERSISTENT, FLOAT, "0.2"}},
+    {"IQLiveSteerDelay", {PERSISTENT, BOOL, "1"}},
+    {"IQSoftwareSteerDelay", {PERSISTENT, FLOAT, "0.2"}},
+    {"IQSteerDelayCache", {PERSISTENT, FLOAT, "0.2"}},
     {"LaneChangeBsd", {PERSISTENT, INT, "0"}},          // -1 ignore BSD, 0 default, 1 block lane change on BSD
     {"LaneChangeContinuous", {PERSISTENT, BOOL, "0"}},  // 0 one-shot per blinker, 1 chain on held blinker (torque-gated)
     {"LaneChangeDelay", {PERSISTENT, FLOAT, "0.0"}},    // tenths of a second; scaled by 0.1 in desire_helper
