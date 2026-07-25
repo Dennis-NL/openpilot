@@ -100,9 +100,10 @@ class CarInterface(CarInterfaceBase):
       stock_cp.wheelbase = 3.79
       stock_cp.steerRatio = 19.
 
+    # LKAS heartbeat on bus 0 (msg 0x4FF) means the camera is on the ADAS bus and
+    # IQ.Pilot can steer down to a standstill.
     if 0x4FF in fingerprint[0]:
       ret.flags |= ChryslerFlagsIQ.NO_MIN_STEERING_SPEED.value
       stock_cp.minSteerSpeed = 0.
-
 
     return ret

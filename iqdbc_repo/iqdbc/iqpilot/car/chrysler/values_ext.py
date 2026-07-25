@@ -1,7 +1,9 @@
 """
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
-"""
 
+IQ.Pilot Chrysler extension flags + the cruise-button table read by the AOL
+cruise-button reader.
+"""
 from collections import namedtuple
 from enum import IntFlag
 
@@ -20,5 +22,3 @@ BUTTONS = [
 
 class ChryslerFlagsIQ(IntFlag):
   NO_MIN_STEERING_SPEED = 1
-
-

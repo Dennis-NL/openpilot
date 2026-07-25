@@ -1,7 +1,8 @@
 """
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
-"""
 
+Nissan cruise-button reader: emits edge ButtonEvents for the RES/SET buttons.
+"""
 from enum import StrEnum
 
 from iqdbc.car import Bus, structs
@@ -13,20 +14,18 @@ class CarStateExt:
   def __init__(self, CP, CP_IQ):
     self.CP = CP
     self.CP_IQ = CP_IQ
-
-    self.button_events = []
+    self.button_events: list = []
     self.button_states = {button.event_type: False for button in BUTTONS}
 
-  def update(self, ret: structs.CarState, ret_iq: structs.IQCarState, can_parsers: dict[StrEnum, CANParser]):
+  def update(self, ret: structs.CarState, ret_iq: structs.IQCarState, can_parsers: dict[StrEnum, CANParser]) -> None:
     cp = can_parsers[Bus.pt]
-
-    button_events = []
+    events = []
     for button in BUTTONS:
-      state = (cp.vl[button.can_addr][button.can_msg] in button.values)
-      if self.button_states[button.event_type] != state:
+      pressed = cp.vl[button.can_addr][button.can_msg] in button.values
+      if pressed != self.button_states[button.event_type]:
         event = structs.CarState.ButtonEvent.new_message()
         event.type = button.event_type
-        event.pressed = state
-        button_events.append(event)
-      self.button_states[button.event_type] = state
-    self.button_events = button_events
+        event.pressed = pressed
+        events.append(event)
+      self.button_states[button.event_type] = pressed
+    self.button_events = events

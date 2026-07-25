@@ -5,6 +5,7 @@ from iqdbc.car import Bus, create_button_events, structs
 from iqdbc.car.common.conversions import Conversions as CV
 from iqdbc.car.interfaces import CarStateBase
 from iqdbc.car.nissan.values import CAR, DBC, CarControllerParams
+
 from iqdbc.iqpilot.car.nissan.carstate_ext import CarStateExt
 
 ButtonType = structs.CarState.ButtonEvent.Type

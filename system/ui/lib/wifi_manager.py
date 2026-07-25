@@ -67,6 +67,9 @@ class MeteredType(IntEnum):
   NO = 2
 
 
+_WARNED_UNSUPPORTED_NETWORKS: set[tuple[int, int, int]] = set()
+
+
 def get_security_type(flags: int, wpa_flags: int, rsn_flags: int) -> SecurityType:
   wpa_props = wpa_flags | rsn_flags
 
@@ -83,7 +86,10 @@ def get_security_type(flags: int, wpa_flags: int, rsn_flags: int) -> SecurityTyp
     # WPA2, WPA2+WPA3 mixed, or WPA — all handled via WPA key_mgmt (NM negotiates SAE if available)
     return SecurityType.WPA2
   else:
-    cloudlog.warning(f"Unsupported network! flags: {flags}, wpa_flags: {wpa_flags}, rsn_flags: {rsn_flags}")
+    _key = (flags, wpa_flags, rsn_flags)
+    if _key not in _WARNED_UNSUPPORTED_NETWORKS:
+      _WARNED_UNSUPPORTED_NETWORKS.add(_key)
+      cloudlog.warning(f"Unsupported network! flags: {flags}, wpa_flags: {wpa_flags}, rsn_flags: {rsn_flags}")
     return SecurityType.UNSUPPORTED
 
 

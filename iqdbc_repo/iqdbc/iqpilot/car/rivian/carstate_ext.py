@@ -1,5 +1,9 @@
 """
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
+
+Rivian longitudinal-harness-upgrade carState reader: with the upgrade harness the
+right steering-wheel controls and the drive stalk drive the openpilot set speed,
+and the harness exposes blind-spot indicators. Only active behind the upgrade flag.
 """
 import math
 from enum import StrEnum
@@ -12,8 +16,10 @@ from iqdbc.iqpilot.car.rivian.values import RivianFlagsIQ
 
 ButtonType = structs.CarState.ButtonEvent.Type
 
-MAX_SET_SPEED = 85 * CV.MPH_TO_MS
-MIN_SET_SPEED = 20 * CV.MPH_TO_MS
+_SET_SPEED_MAX = 85 * CV.MPH_TO_MS
+_SET_SPEED_MIN = 20 * CV.MPH_TO_MS
+_LONG_PRESS_FRAMES = 66
+_STALK_HOLD_FRAMES = 50
 
 
 class CarStateExt:
@@ -29,57 +35,57 @@ class CarStateExt:
     self.decrease_counter = 0
     self.stalk_down_counter = 0
 
+  def _apply_set_speed_buttons(self, ret: structs.CarState, cp_park, cp_adas) -> None:
+    was_increasing = self.increase_button
+    was_decreasing = self.decrease_button
+
+    self.increase_button = cp_park.vl["WheelButtons"]["RightButton_RightClick"] == 2
+    self.decrease_button = cp_park.vl["WheelButtons"]["RightButton_LeftClick"] == 2
+    self.increase_counter = self.increase_counter + 1 if self.increase_button else 0
+    self.decrease_counter = self.decrease_counter + 1 if self.decrease_button else 0
+
+    metric = cp_adas.vl["Cluster"]["Cluster_Unit"] == 0
+    conversion = CV.KPH_TO_MS if metric else CV.MPH_TO_MS
+    step = 10.0 if metric else 5.0
+    shown = self.set_speed * (CV.MS_TO_KPH if metric else CV.MS_TO_MPH)
+
+    # A held button steps to the next round multiple; a tap nudges by one unit.
+    if self.increase_button:
+      if self.increase_counter % _LONG_PRESS_FRAMES == 0:
+        self.set_speed = math.ceil((shown + 1) / step) * step * conversion
+      elif not was_increasing:
+        self.set_speed += conversion
+    if self.decrease_button:
+      if self.decrease_counter % _LONG_PRESS_FRAMES == 0:
+        self.set_speed = math.floor((shown - 1) / step) * step * conversion
+      elif not was_decreasing:
+        self.set_speed -= conversion
+
   def update_longitudinal_upgrade(self, ret: structs.CarState, can_parsers: dict[StrEnum, CANParser]) -> None:
     cp_park = can_parsers[Bus.alt]
     cp_adas = can_parsers[Bus.adas]
     cp = can_parsers[Bus.pt]
 
-    prev_increase_button = self.increase_button
-    prev_decrease_button = self.decrease_button
-
     if self.CP.openpilotLongitudinalControl:
-      # distance scroll wheel
       right_scroll = cp_park.vl["WheelButtons"]["RightButton_Scroll"]
       if right_scroll != 255:
         if self.distance_button != right_scroll:
           ret.buttonEvents = [structs.CarState.ButtonEvent(pressed=False, type=ButtonType.gapAdjustCruise)]
         self.distance_button = right_scroll
 
-      # button logic for set-speed
-      self.increase_button = cp_park.vl["WheelButtons"]["RightButton_RightClick"] == 2
-      self.decrease_button = cp_park.vl["WheelButtons"]["RightButton_LeftClick"] == 2
-
-      self.increase_counter = self.increase_counter + 1 if self.increase_button else 0
-      self.decrease_counter = self.decrease_counter + 1 if self.decrease_button else 0
-
-      metric = cp_adas.vl["Cluster"]["Cluster_Unit"] == 0
-      conversion = CV.KPH_TO_MS if metric else CV.MPH_TO_MS
-      long_press_step = 10.0 if metric else 5.0
-      set_speed_converted = self.set_speed * (CV.MS_TO_KPH if metric else CV.MS_TO_MPH)
-
-      if self.increase_button:
-        if self.increase_counter % 66 == 0:
-          self.set_speed = (int(math.ceil((set_speed_converted + 1) / long_press_step)) * long_press_step) * conversion
-        elif not prev_increase_button:
-          self.set_speed += conversion
-
-      if self.decrease_button:
-        if self.decrease_counter % 66 == 0:
-          self.set_speed = (int(math.floor((set_speed_converted - 1) / long_press_step)) * long_press_step) * conversion
-        elif not prev_decrease_button:
-          self.set_speed -= conversion
+      self._apply_set_speed_buttons(ret, cp_park, cp_adas)
 
       if not ret.cruiseState.enabled:
         self.set_speed = ret.vEgoCluster
 
-      # VDM_UserAdasRequest: 0=IDLE, 1=UP_1, 2=UP_2, 3=DOWN_1, 4=DOWN_2
+      # Drive stalk held down (VDM_UserAdasRequest 3/4) for ~0.5s snaps set speed
+      # up to the current speed, matching stock Rivian ACC (it never lowers it).
       stalk_down = int(cp.vl["VDM_AdasSts"]["VDM_UserAdasRequest"]) in (3, 4)
       self.stalk_down_counter = self.stalk_down_counter + 1 if stalk_down else 0
-      if self.stalk_down_counter == 50:
-        # Mimic Rivian ACC: holding stalk 0.5s sets speed to current speed (never decreases)
+      if self.stalk_down_counter == _STALK_HOLD_FRAMES:
         self.set_speed = max(self.set_speed, ret.vEgoCluster)
 
-      self.set_speed = max(MIN_SET_SPEED, min(self.set_speed, MAX_SET_SPEED))
+      self.set_speed = max(_SET_SPEED_MIN, min(self.set_speed, _SET_SPEED_MAX))
       ret.cruiseState.speed = self.set_speed
 
     if self.CP.enableBsm:
@@ -92,9 +98,7 @@ class CarStateExt:
 
   @staticmethod
   def get_parser(CP, CP_IQ) -> dict[StrEnum, CANParser]:
-    messages = {}
-
+    messages: dict[StrEnum, CANParser] = {}
     if CP_IQ.flags & RivianFlagsIQ.LONGITUDINAL_HARNESS_UPGRADE:
       messages[Bus.alt] = CANParser(DBC[CP.carFingerprint][Bus.alt], [], 5)
-
     return messages

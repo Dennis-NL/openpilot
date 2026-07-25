@@ -1,45 +1,36 @@
 """
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
+
+Always-on-Lateral input adapter for Subaru: turns the dashboard LKAS button into
+a carState lkas ButtonEvent so the shared AOL state machine can toggle lateral.
 """
-
 from enum import StrEnum
-from iqdbc.car import Bus, structs
 
+from iqdbc.car import Bus, structs
 from iqdbc.car.subaru.values import SubaruFlags
 from iqdbc.iqpilot.aol_base import AolCarStateBase
 from iqdbc.can.parser import CANParser
 
-ButtonType = structs.CarState.ButtonEvent.Type
+_LKAS = structs.CarState.ButtonEvent.Type.lkas
+
+# ES_LKAS_State/LKAS_Dash_State: 0 = neutral, 1 = LKAS shown on, 2 = LKAS shown off
+_DASH_ON = 1
+_DASH_OFF = 2
 
 
 class AolCarState(AolCarStateBase):
-  def __init__(self, CP: structs.CarParams, CP_IQ: structs.IQCarParams):
-    super().__init__(CP, CP_IQ)
-
-  @staticmethod
-  def create_lkas_button_events(cur_btn: int, prev_btn: int,
-                                buttons_dict: dict[int, structs.CarState.ButtonEvent.Type]) -> list[structs.CarState.ButtonEvent]:
-    events: list[structs.CarState.ButtonEvent] = []
-
-    if cur_btn == prev_btn:
-      return events
-
-    state_changes = [
-      {"pressed": prev_btn != cur_btn and cur_btn != 2 and not (prev_btn == 2 and cur_btn == 1)},
-      {"pressed": prev_btn != cur_btn and cur_btn == 2 and cur_btn != 1},
-    ]
-
-    for change in state_changes:
-      if change["pressed"]:
-        events.append(structs.CarState.ButtonEvent(pressed=change["pressed"],
-                                                   type=buttons_dict.get(cur_btn, ButtonType.unknown)))
-    return events
-
   def update_aol(self, ret: structs.CarState, can_parsers: dict[StrEnum, CANParser]) -> None:
-    cp_cam = can_parsers[Bus.cam]
+    if self.CP.flags & SubaruFlags.PREGLOBAL:
+      return
 
     self.prev_lkas_button = self.lkas_button
-    if not self.CP.flags & SubaruFlags.PREGLOBAL:
-      self.lkas_button = cp_cam.vl["ES_LKAS_State"]["LKAS_Dash_State"]
+    self.lkas_button = can_parsers[Bus.cam].vl["ES_LKAS_State"]["LKAS_Dash_State"]
 
-    ret.buttonEvents = self.create_lkas_button_events(self.lkas_button, self.prev_lkas_button, {1: ButtonType.lkas})
+    if self._is_toggle_edge():
+      ret.buttonEvents = [*ret.buttonEvents, structs.CarState.ButtonEvent(type=_LKAS, pressed=True)]
+
+  def _is_toggle_edge(self) -> bool:
+    # every dash-state change is a deliberate press except the off->on rebound (2 -> 1)
+    if self.lkas_button == self.prev_lkas_button:
+      return False
+    return not (self.prev_lkas_button == _DASH_OFF and self.lkas_button == _DASH_ON)

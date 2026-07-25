@@ -43,7 +43,10 @@ struct EncoderSettings {
   }
 
   static EncoderSettings QcamEncoderSettings() {
-    int _qcam_bitrate = getenv("QCAM_BITRATE") ? atoi(getenv("QCAM_BITRATE")) : 3'200'000;
+    // Keep Konn3kt route uploads useful without turning each 60-second qcamera
+    // segment into a 26 MB file. This is still a substantial improvement over
+    // stock qcam, while CBR keeps storage and upload usage predictable.
+    int _qcam_bitrate = getenv("QCAM_BITRATE") ? atoi(getenv("QCAM_BITRATE")) : 2'400'000;
     return EncoderSettings{.encode_type = cereal::EncodeIndex::Type::QCAMERA_H264, .bitrate = _qcam_bitrate, .gop_size = 15};
   }
 
@@ -137,8 +140,8 @@ const EncoderInfo qcam_encoder_info = {
   .filename = "qcamera.ts",
   .cbr = true,           // enforce the bitrate so upload size stays predictable (no VBR overshoot)
   .get_settings = [](int){return EncoderSettings::QcamEncoderSettings();},
-  .frame_width = 1578,   // 3x the stock 526x330, same road-cam aspect ratio
-  .frame_height = 990,
+  .frame_width = 1315,   // 2.5x the stock 526x330, same road-cam aspect ratio
+  .frame_height = 825,
   .include_audio = Params().getBool("RecordAudio"),
   INIT_ENCODE_FUNCTIONS(QRoadEncode),
 };

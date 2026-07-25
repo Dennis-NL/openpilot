@@ -1,33 +1,30 @@
 """
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
+
+Always-on-Lateral output adapter for Rivian: derives the per-frame lateral-active
+and lane-keep icon state the LKAS command needs from the shared AOL state.
 """
 from collections import namedtuple
 
 from iqdbc.car import structs
 from iqdbc.car.interfaces import CarStateBase
 
-MAX_STEERING_ANGLE = 90.0
+# Rivian EPAS rejects large-angle torque, so lateral is dropped past this bound.
+_MAX_STEERING_ANGLE = 90.0
 
-AolDataIQ = namedtuple("AolDataIQ",
-                        ["lka_icon_states", "lat_active"])
+AolDataIQ = namedtuple("AolDataIQ", ["lka_icon_states", "lat_active"])
 
 
 class AolCarController:
   def __init__(self):
     self.aol = AolDataIQ(False, False)
 
-    self.lka_icon_states = False
-    self.lat_active = False
-
-  def aol_status_update(self, CC: structs.CarControl, CC_IQ: structs.IQCarControl, CS: CarStateBase) -> AolDataIQ:
-    if CC_IQ.aol.available:
-      self.lka_icon_states = self.lat_active
-      self.lat_active = CC.latActive and abs(CS.out.steeringAngleDeg) < MAX_STEERING_ANGLE
-    else:
-      self.lka_icon_states = CC.enabled
-      self.lat_active = CC.latActive
-
-    return AolDataIQ(self.lka_icon_states, self.lat_active)
-
   def update(self, CC: structs.CarControl, CC_IQ: structs.IQCarControl, CS: CarStateBase) -> None:
-    self.aol = self.aol_status_update(CC, CC_IQ, CS)
+    prev_active = self.aol.lat_active
+    if CC_IQ.aol.available:
+      lat_active = CC.latActive and abs(CS.out.steeringAngleDeg) < _MAX_STEERING_ANGLE
+      lka_icon = prev_active
+    else:
+      lat_active = CC.latActive
+      lka_icon = CC.enabled
+    self.aol = AolDataIQ(lka_icon, lat_active)

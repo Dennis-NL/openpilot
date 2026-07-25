@@ -1,7 +1,11 @@
 """
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
-"""
 
+IQ.Pilot Subaru stop-and-go: nudges the ACC out of a standstill it would
+otherwise hold. Two variants gated by user flags — an electronic-parking-brake
+resume pulse (distance/lead triggered) and a manual-parking-brake hold-timer
+resume. Both work by spoofing the camera-bus throttle/brake frames.
+"""
 import copy
 from enum import StrEnum
 
@@ -14,93 +18,64 @@ from iqdbc.iqpilot.car.subaru import subarucan_ext
 from iqdbc.iqpilot.car.subaru.values_ext import SubaruFlagsIQ
 from iqdbc.can.parser import CANParser
 
-_SNG_ACC_MIN_DIST = 3
-_SNG_ACC_MAX_DIST = 4.5
+# EPB resume fires only while the lead is pulling away within this gap band (m).
+_RESUME_GAP_MIN = 3.0
+_RESUME_GAP_MAX = 4.5
+_EPB_PULSE_FRAMES = 15
 
 
 class SnGCarController:
   def __init__(self, CP: structs.CarParams, CP_IQ: structs.IQCarParams):
     self.CP = CP
     self.CP_IQ = CP_IQ
-    self.enabled = CP_IQ.flags & (SubaruFlagsIQ.STOP_AND_GO | SubaruFlagsIQ.STOP_AND_GO_MANUAL_PARKING_BRAKE)
-    self.manual_parking_brake = CP_IQ.flags & SubaruFlagsIQ.STOP_AND_GO_MANUAL_PARKING_BRAKE
+    self.enabled = bool(CP_IQ.flags & (SubaruFlagsIQ.STOP_AND_GO | SubaruFlagsIQ.STOP_AND_GO_MANUAL_PARKING_BRAKE))
+    self.manual_parking_brake = bool(CP_IQ.flags & SubaruFlagsIQ.STOP_AND_GO_MANUAL_PARKING_BRAKE)
 
-    self.last_standstill_frame = 0
-    self.epb_resume_frames_remaining = -1
-    self.prev_close_distance = 0.0
+    self.standstill_since = 0
+    self._pulse_left = 0
+    self.prev_gap = 0.0
 
-  def update_epb_resume_sequence(self, should_resume: bool) -> bool:
+  def _epb_pulse(self, trigger: bool) -> bool:
+    # A trigger arms a fixed-length resume pulse; the pulse then plays out frame by frame.
     if self.manual_parking_brake:
       return False
+    if trigger:
+      self._pulse_left = _EPB_PULSE_FRAMES
+    if self._pulse_left > 0:
+      self._pulse_left -= 1
+      return True
+    return False
 
-    if should_resume:
-      self.epb_resume_frames_remaining = 15
-
-    send_resume = self.epb_resume_frames_remaining > 0
-    if self.epb_resume_frames_remaining > 0:
-      self.epb_resume_frames_remaining -= 1
-
-    return send_resume
-
-  def update_stop_and_go(self, CC: structs.CarControl, CS: CarStateBase, frame: int) -> bool:
-    """
-    Manages stop-and-go functionality for adaptive cruise control (ACC).
-
-    Args:
-        CC: Car control data
-        CS: Car state data
-        frame: Current frame number
-
-    Returns:
-        bool: True if resume command should be sent, False otherwise
-    """
-
+  def _want_resume(self, CC: structs.CarControl, CS: CarStateBase, frame: int) -> bool:
     if not CC.enabled or not CC.hudControl.leadVisible:
       return False
 
-    close_distance = CS.es_distance_msg["Close_Distance"]
-    in_standstill = CS.out.standstill
+    gap = CS.es_distance_msg["Close_Distance"]
+    standing = CS.out.standstill
+    if not standing:
+      self.standstill_since = frame
 
-    if not in_standstill:
-      self.last_standstill_frame = frame
+    hold_arm, hold_reset = (0.75, 0.8) if self.CP.flags & SubaruFlags.PREGLOBAL else (0.5, 0.55)
+    held_for = (frame - self.standstill_since) * DT_CTRL
+    held_long_enough = held_for > hold_arm
+    if held_for >= hold_reset:
+      self.standstill_since = frame
 
-    # Check if we've been in standstill long enough
-    mpb_standstill_timers = (0.75, 0.8) if self.CP.flags & SubaruFlags.PREGLOBAL else (0.5, 0.55)
-    standstill_duration = (frame - self.last_standstill_frame) * DT_CTRL
-    in_standstill_hold = standstill_duration > mpb_standstill_timers[0]
-    if (frame - self.last_standstill_frame) * DT_CTRL >= mpb_standstill_timers[1]:
-      self.last_standstill_frame = frame
-
-    # Car state distance-based conditions (EPB only)
-    in_resume_distance = _SNG_ACC_MIN_DIST < close_distance < _SNG_ACC_MAX_DIST
-    distance_increasing = close_distance > self.prev_close_distance
-    distance_resume_allowed = in_resume_distance and distance_increasing
+    lead_pulling_away = _RESUME_GAP_MIN < gap < _RESUME_GAP_MAX and gap > self.prev_gap
+    self.prev_gap = gap
 
     if self.manual_parking_brake:
-      # Manual parking brake: Direct resume when the standstill hold threshold is reached to prevent ACC fault
-      send_resume = in_standstill_hold
-    else:
-      # EPB: Resume sequence with trigger on distance with lead car increasing
-      should_resume = CS.out.standstill and distance_resume_allowed
-      send_resume = self.update_epb_resume_sequence(should_resume)
-
-    self.prev_close_distance = close_distance
-
-    return send_resume
+      return held_long_enough
+    return self._epb_pulse(standing and lead_pulling_away)
 
   def create_stop_and_go(self, packer, CC: structs.CarControl, CS: CarStateBase, frame: int) -> list[CanData]:
-    can_sends = []
-
     if not self.enabled:
-      return can_sends
+      return []
 
-    send_resume = self.update_stop_and_go(CC, CS, frame)
-
-    can_sends.append(subarucan_ext.create_throttle(packer, self.CP, CS.throttle_msg, send_resume and not self.manual_parking_brake))
-
+    resume = self._want_resume(CC, CS, frame)
+    can_sends = [subarucan_ext.create_throttle(packer, self.CP, CS.throttle_msg, resume and not self.manual_parking_brake)]
     if frame % 2 == 0:
-      can_sends.append(subarucan_ext.create_brake_pedal(packer, self.CP, CS.brake_pedal_msg, send_resume and self.manual_parking_brake))
-
+      can_sends.append(subarucan_ext.create_brake_pedal(packer, self.CP, CS.brake_pedal_msg, resume and self.manual_parking_brake))
     return can_sends
 
 
@@ -108,14 +83,11 @@ class SnGCarState:
   def __init__(self, CP: structs.CarParams, CP_IQ: structs.IQCarParams):
     self.CP = CP
     self.CP_IQ = CP_IQ
-
     self.brake_pedal_msg: dict[str, float] = {}
     self.throttle_msg: dict[str, float] = {}
 
   def update(self, ret: structs.CarState, can_parsers: dict[StrEnum, CANParser]) -> None:
     cp = can_parsers[Bus.pt]
-
     self.brake_pedal_msg = copy.copy(cp.vl["Brake_Pedal"])
-
     if not self.CP.flags & SubaruFlags.HYBRID:
       self.throttle_msg = copy.copy(cp.vl["Throttle"])

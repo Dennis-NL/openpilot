@@ -96,16 +96,17 @@ def _initialize_coop_steering(CP: structs.CarParams, CP_IQ: structs.IQCarParams,
 
 
 def _initialize_stop_and_go(CP: structs.CarParams, CP_IQ: structs.IQCarParams, params_dict: dict[str, str]) -> None:
-  if CP.brand == 'subaru' and not CP.flags & (SubaruFlags.GLOBAL_GEN2 | SubaruFlags.HYBRID):
-    stop_and_go = int(params_dict.get("SubaruStopAndGo", 0)) == 1
-    stop_and_go_manual_parking_brake = int(params_dict.get("SubaruStopAndGoManualParkingBrake", 0)) == 1
+  # Subaru stop-and-go; unsupported on gen2-global and hybrid platforms.
+  if CP.brand != 'subaru' or CP.flags & (SubaruFlags.GLOBAL_GEN2 | SubaruFlags.HYBRID):
+    return
 
-    if stop_and_go:
-      CP_IQ.flags |= SubaruFlagsIQ.STOP_AND_GO.value
-    if stop_and_go_manual_parking_brake:
-      CP_IQ.flags |= SubaruFlagsIQ.STOP_AND_GO_MANUAL_PARKING_BRAKE.value
-    if stop_and_go or stop_and_go_manual_parking_brake:
-      CP_IQ.safetyParam |= SubaruSafetyFlagsIQ.STOP_AND_GO
+  if int(params_dict.get("SubaruStopAndGo", 0)) == 1:
+    CP_IQ.flags |= SubaruFlagsIQ.STOP_AND_GO.value
+  if int(params_dict.get("SubaruStopAndGoManualParkingBrake", 0)) == 1:
+    CP_IQ.flags |= SubaruFlagsIQ.STOP_AND_GO_MANUAL_PARKING_BRAKE.value
+
+  if CP_IQ.flags & (SubaruFlagsIQ.STOP_AND_GO | SubaruFlagsIQ.STOP_AND_GO_MANUAL_PARKING_BRAKE):
+    CP_IQ.iqSafetyFlags |= SubaruSafetyFlagsIQ.STOP_AND_GO
 
 
 def _initialize_toyota(CP: structs.CarParams, CP_IQ: structs.IQCarParams, params_dict: dict[str, str]) -> None:

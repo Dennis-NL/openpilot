@@ -121,16 +121,16 @@ class ModelsLayoutMici(NavScroller):
     self._clear.set_click_callback(self._confirm_clear_cache)
     self._clear.set_enabled(lambda: ui_state.is_offroad())
 
-    self._lagd = BigParamControl("live learning steer delay", "IQLiveSteerDelay")
-    self._sw_delay = MappedParamToggle("software delay", "IQSoftwareSteerDelay", _DELAY_OPTIONS, _DELAY_VALUES)
-    self._sw_delay.set_visible(lambda: not self._lagd._checked)
+    self._steer_delay = BigParamControl("self-tuning steer delay", "IQLiveSteerDelay")
+    self._sw_delay = MappedParamToggle("manual delay offset", "IQSoftwareSteerDelay", _DELAY_OPTIONS, _DELAY_VALUES)
+    self._sw_delay.set_visible(lambda: not self._steer_delay._checked)
 
     self._lane_turn = BigParamControl("use lane turn desires", "IQLaneTurnDesire")
     self._lane_speed = MappedParamToggle("lane turn speed", "IQLaneTurnValue", _LANE_TURN_OPTIONS, _LANE_TURN_VALUES)
     self._lane_speed.set_visible(lambda: self._lane_turn._checked)
 
     self._main_items = [self._current, self._cancel, self._supercombo, self._vision, self._policy, self._redownload, self._refresh, self._clear,
-                        self._lagd, self._sw_delay, self._lane_turn, self._lane_speed]
+                        self._steer_delay, self._sw_delay, self._lane_turn, self._lane_speed]
     self._scroller.add_widgets(self._main_items)
 
   @property
@@ -368,7 +368,7 @@ class ModelsLayoutMici(NavScroller):
       self._last_cache_t = now
       self._clear.set_value(f"{self._calculate_cache_size():.1f} MB")
 
-    self._update_lagd_subtext()
+    self._update_steer_delay_subtext()
 
   def _progress_target_bundle(self):
     try:
@@ -445,21 +445,21 @@ class ModelsLayoutMici(NavScroller):
       return f"failed: {_display_model_name(bundle)}"
     return self._active_model_name()
 
-  def _update_lagd_subtext(self):
-    if self._lagd._checked:
+  def _update_steer_delay_subtext(self):
+    if self._steer_delay._checked:
       try:
-        self._lagd.set_value(f"live {ui_state.sm['liveDelay'].lateralDelay:.3f} s")
+        self._steer_delay.set_value(f"measured {ui_state.sm['liveDelay'].lateralDelay:.3f} s")
       except Exception:
-        self._lagd.set_value("")
+        self._steer_delay.set_value("")
       return
     try:
       sw = float(ui_state.params.get("IQSoftwareSteerDelay", return_default=True))
     except (TypeError, ValueError):
       sw = 0.2
     if ui_state.CP is not None:
-      self._lagd.set_value(f"total {ui_state.CP.steerActuatorDelay + sw:.2f} s")
+      self._steer_delay.set_value(f"total {ui_state.CP.steerActuatorDelay + sw:.2f} s")
     else:
-      self._lagd.set_value(f"+{sw:.2f} s software")
+      self._steer_delay.set_value(f"+{sw:.2f} s offset")
 
   def _active_model_name(self) -> str:
     if not self._has_active_bundle_param():
@@ -495,5 +495,5 @@ class ModelsLayoutMici(NavScroller):
 
   def show_event(self):
     super().show_event()
-    for w in (self._lagd, self._sw_delay, self._lane_turn, self._lane_speed):
+    for w in (self._steer_delay, self._sw_delay, self._lane_turn, self._lane_speed):
       w.refresh()

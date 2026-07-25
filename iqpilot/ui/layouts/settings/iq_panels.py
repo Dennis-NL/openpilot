@@ -872,10 +872,10 @@ class SteeringLayout(Widget):
       lambda v: f"{int(round(v * (CV.MPH_TO_KPH if ui_state.is_metric else 1)))}"
                 f" {'km/h' if ui_state.is_metric else 'mph'}"
     )
-    self._lagd_toggle = toggle_item(tr("Live Learning Steer Delay"), "", param="IQLiveSteerDelay")
+    self._steer_delay_toggle = toggle_item(tr("Self-Tuning Steer Delay"), "", param="IQLiveSteerDelay")
     self._delay_control = option_item(
-      tr("Adjust Software Delay"), "IQSoftwareSteerDelay", 5, 50,
-      tr("Adjust the fixed software delay added to steer actuator delay when Live Learning Steer Delay is turned off. The default software delay value is 0.2 s."),
+      tr("Manual Delay Offset"), "IQSoftwareSteerDelay", 5, 50,
+      tr("How much lead time to add on top of the car's own steering rack delay while self-tuning is off. Default is 0.2 s."),
       1, None, True, "", style.BUTTON_ACTION_WIDTH, None, True, lambda v: f"{float(v):.2f}s"
     )
 
@@ -890,7 +890,7 @@ class SteeringLayout(Widget):
       self._lane_turn_desire_toggle,
       self._lane_turn_value_control,
       IQLineSeparator(40),
-      self._lagd_toggle,
+      self._steer_delay_toggle,
       self._delay_control,
     ]
     return items
@@ -922,19 +922,20 @@ class SteeringLayout(Widget):
     live_delay = ui_state.params.get_bool("IQLiveSteerDelay")
     self._lane_turn_desire_toggle.action_item.set_state(turn_desire)
     self._lane_turn_value_control.set_visible(turn_desire)
-    self._lagd_toggle.action_item.set_state(live_delay)
+    self._steer_delay_toggle.action_item.set_state(live_delay)
     self._delay_control.set_visible(not live_delay)
     new_step = int(round(100 / CV.MPH_TO_KPH)) if ui_state.is_metric else 100
     if self._lane_turn_value_control.action_item.value_change_step != new_step:
       self._lane_turn_value_control.action_item.value_change_step = new_step
-    lagd_desc = tr("Enable this for the car to learn and adapt its steering response time. Disable to use a fixed steering response time.")
+    delay_desc = tr("Let IQ.Pilot measure how long your steering takes to respond and keep that figure up to date. "
+                    "Switch it off to pin the timing yourself.")
     if live_delay:
-      lagd_desc += f"<br>{tr('Live Steer Delay:')} {ui_state.sm['liveDelay'].lateralDelay:.3f} s"
+      delay_desc += f"<br>{tr('Measured:')} {ui_state.sm['liveDelay'].lateralDelay:.3f} s"
     elif ui_state.CP:
       sw = float(ui_state.params.get("IQSoftwareSteerDelay", "0.2"))
       cp = ui_state.CP.steerActuatorDelay
-      lagd_desc += f"<br>{tr('Actuator Delay:')} {cp:.2f} s + {tr('Software Delay:')} {sw:.2f} s = {tr('Total Delay:')} {cp + sw:.2f} s"
-    self._lagd_toggle.set_description(lagd_desc)
+      delay_desc += f"<br>{tr('Rack:')} {cp:.2f} s + {tr('Offset:')} {sw:.2f} s = {tr('Total:')} {cp + sw:.2f} s"
+    self._steer_delay_toggle.set_description(delay_desc)
 
   def _render(self, rect):
     if self._current_panel == PanelType.LANE_CHANGE:
