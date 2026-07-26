@@ -28,6 +28,13 @@ const int SEGMENT_LENGTH = LOGGERD_TEST ? atoi(getenv("LOGGERD_SEGMENT_LENGTH"))
 constexpr char PRESERVE_ATTR_NAME[] = "user.preserve";
 constexpr char PRESERVE_ATTR_VALUE = '1';
 
+// 2.5x the stock 526x330 qcamera, rounded up to even. The msm_vidc encoder rejects
+// VIDIOC_S_FMT with ENOTSUPP (524) on an odd width or height, which throws out of
+// encoder_thread and SIGABRTs all of encoderd -- taking fcamera/dcamera/ecamera with it.
+constexpr int QCAM_WIDTH = 1316;
+constexpr int QCAM_HEIGHT = 826;
+static_assert(QCAM_WIDTH % 2 == 0 && QCAM_HEIGHT % 2 == 0, "qcamera dimensions must be even");
+
 struct EncoderSettings {
   cereal::EncodeIndex::Type encode_type;
   int bitrate;
@@ -140,8 +147,8 @@ const EncoderInfo qcam_encoder_info = {
   .filename = "qcamera.ts",
   .cbr = true,           // enforce the bitrate so upload size stays predictable (no VBR overshoot)
   .get_settings = [](int){return EncoderSettings::QcamEncoderSettings();},
-  .frame_width = 1315,   // 2.5x the stock 526x330, same road-cam aspect ratio
-  .frame_height = 825,
+  .frame_width = QCAM_WIDTH,
+  .frame_height = QCAM_HEIGHT,
   .include_audio = Params().getBool("RecordAudio"),
   INIT_ENCODE_FUNCTIONS(QRoadEncode),
 };
