@@ -4,7 +4,7 @@ from enum import Enum, IntFlag
 from iqdbc.car import Bus, PlatformConfig, DbcDict, Platforms, CarSpecs
 from iqdbc.car.structs import CarParams
 from iqdbc.car.docs_definitions import CarDocs, CarFootnote, CarHarness, CarParts, Column, SupportType
-from iqdbc.iqpilot.car.gm.values_ext import GMFlagsIQ
+from iqdbc.lvbs.car.gm.iq_values import GMFlagsIQ
 from iqdbc.car.fw_query_definitions import FwQueryConfig, Request, StdQueries
 
 Ecu = CarParams.Ecu

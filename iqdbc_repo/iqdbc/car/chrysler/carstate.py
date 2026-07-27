@@ -4,17 +4,17 @@ from iqdbc.car.chrysler.values import DBC, STEER_THRESHOLD, RAM_CARS
 from iqdbc.car.common.conversions import Conversions as CV
 from iqdbc.car.interfaces import CarStateBase
 
-from iqdbc.iqpilot.car.chrysler.aol import AolCarState
-from iqdbc.iqpilot.car.chrysler.carstate_ext import CarStateExt
+from iqdbc.lvbs.car.chrysler.aol import AolCarState
+from iqdbc.lvbs.car.chrysler.iq_carstate import IQCarState
 
 ButtonType = structs.CarState.ButtonEvent.Type
 
 
-class CarState(CarStateBase, AolCarState, CarStateExt):
+class CarState(CarStateBase, AolCarState, IQCarState):
   def __init__(self, CP, CP_IQ):
     CarStateBase.__init__(self, CP, CP_IQ)
     AolCarState.__init__(self, CP, CP_IQ)
-    CarStateExt.__init__(self, CP, CP_IQ)
+    IQCarState.__init__(self, CP, CP_IQ)
     self.CP = CP
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
 
@@ -102,7 +102,7 @@ class CarState(CarStateBase, AolCarState, CarStateExt):
     self.button_counter = cp.vl["CRUISE_BUTTONS"]["COUNTER"]
 
     AolCarState.update_aol(self, ret, can_parsers)
-    CarStateExt.update(self, ret, ret_iq, can_parsers)
+    IQCarState.update(self, ret, ret_iq, can_parsers)
 
     ret.buttonEvents = [
       *create_button_events(self.distance_button, prev_distance_button, {1: ButtonType.gapAdjustCruise}),

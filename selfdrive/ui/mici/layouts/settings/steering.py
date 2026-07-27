@@ -47,7 +47,7 @@ class SabSettingsPanel(NavScroller):
     self._main_cruise = BigParamControl("Availability While Cruise Changes", "AolMainCruiseAllowed")
     self._brake = SabBrakeToggle()
     self._mode = MappedParamToggle("Brake Response Mode", "AolSteeringMode",
-                                   ["remain active", "standby", "disengage"], [0, 1, 2])
+                                   ["stay engaged", "standby", "disengage"], [0, 1, 2])
     self._scroller.add_widgets([self._main_cruise, self._brake, self._mode])
 
   def show_event(self):
@@ -67,7 +67,7 @@ class LaneChangePanel(NavScroller):
   def __init__(self):
     super().__init__()
     self._timer = MappedParamToggle("Auto Lane Change", "IQLaneChangeTimer",
-                                    ["off", "nudge", "nudgeless", "0.5 s", "1 s", "2 s", "3 s"],
+                                    ["off", "nudge", "no nudge", "0.5 s", "1 s", "2 s", "3 s"],
                                     [-1, 0, 1, 2, 3, 4, 5])
     self._bsm_delay = BigParamControl("Delay with Blind Spot", "IQLaneChangeBsmDelay")
     self._continuous = BigParamControl("Continuous Changes", "LaneChangeContinuous")
@@ -87,7 +87,7 @@ class LaneChangePanel(NavScroller):
 
 
 class SteeringLayoutMici(NavScroller):
-  _AOL_MODES = ["remain active", "standby", "disengage"]
+  _AOL_MODES = ["stay engaged", "standby", "disengage"]
 
   def __init__(self):
     super().__init__()

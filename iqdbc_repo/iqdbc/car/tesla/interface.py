@@ -5,7 +5,7 @@ from iqdbc.car.tesla.carstate import CarState
 from iqdbc.car.tesla.values import TeslaSafetyFlags, TeslaFlags, CANBUS, CAR, DBC, LEGACY_DAS_STEERING_FW, Ecu
 from iqdbc.car.tesla.radar_interface import RadarInterface, RADAR_START_ADDR
 
-from iqdbc.iqpilot.car.tesla.values import TeslaFlagsIQ, TeslaSafetyFlagsIQ
+from iqdbc.lvbs.car.tesla.values import TeslaFlagsIQ, TeslaSafetyFlagsIQ
 
 
 class CarInterface(CarInterfaceBase):

@@ -544,10 +544,10 @@ class SettingsHubLayout(Widget):
 
   def _toggle_offroad_prompt(self):
     if ui_state.engaged:
-      gui_app.set_modal_overlay(alert_dialog(tr("Disengage to Enter Always Offroad Mode")))
+      gui_app.set_modal_overlay(alert_dialog(tr("Disengage before forcing offroad")))
       return
     active = ui_state.params.get_bool("IQAlwaysOffroad")
-    msg = tr("Are you sure you want to exit Always Offroad mode?") if active else tr("Are you sure you want to enter Always Offroad mode?")
+    msg = tr("Leave forced-offroad mode now?") if active else tr("Switch the device into forced-offroad mode?")
 
     def _confirm(result: int):
       if result == DialogResult.CONFIRM and not ui_state.engaged:

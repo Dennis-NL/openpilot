@@ -1,8 +1,8 @@
 # ruff: noqa: E501
 """ AUTO-FORMATTED USING iqdbc/car/debug/format_fingerprints.py, EDIT STRUCTURE THERE."""
 from iqdbc.car.gm.values import CAR
-from iqdbc.iqpilot.car.fingerprints_ext import merge_fingerprints
-from iqdbc.iqpilot.car.gm.fingerprints_ext import FINGERPRINTS_EXT
+from iqdbc.lvbs.car.iq_fingerprints import extend_fingerprints
+from iqdbc.lvbs.car.gm.iq_fingerprints import FINGERPRINTS_EXT
 
 # Trailblazer also matches as a SILVERADO, TODO: split with fw versions
 # FIXME: There are Equinox users with different message lengths, specifically 304 and 320
@@ -81,4 +81,4 @@ FW_VERSIONS: dict[str, dict[tuple, list[bytes]]] = {
 }
 
 
-FINGERPRINTS = merge_fingerprints(FINGERPRINTS, FINGERPRINTS_EXT)
+FINGERPRINTS = extend_fingerprints(FINGERPRINTS, FINGERPRINTS_EXT)

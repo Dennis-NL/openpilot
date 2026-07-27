@@ -117,6 +117,22 @@ static void __attribute__ ((noinline)) enable_fpu(void) {
 #define HEARTBEAT_IGNITION_CNT_OFF 2U
 
 // called at 8Hz
+static volatile bool tick_sample_pending = false;
+
+// All runtime ADC sampling runs here, in thread context. ADC conversions
+// busy-wait for tens to hundreds of microseconds, and all interrupts share one
+// NVIC priority: sampling in the 8Hz tick interrupt delayed the SPI slave's
+// RX DMA re-arm long enough for the host to clock into an unarmed peripheral
+// (checksum failures -> NACK retry storms -> multi-second CAN blackouts).
+static void tick_sample_poll(void) {
+  if (tick_sample_pending) {
+    tick_sample_pending = false;
+    harness_tick();
+    voltage_mV = current_board->read_voltage_mV();
+    current_mA = current_board->read_current_mA();
+  }
+}
+
 static void tick_handler(void) {
   static uint32_t siren_countdown = 0; // siren plays while countdown > 0
   static uint32_t controls_allowed_countdown = 0;
@@ -131,7 +147,7 @@ static void tick_handler(void) {
 
     // tick drivers at 8Hz
     fan_tick();
-    harness_tick();
+    tick_sample_pending = true;  // ADC sampling deferred to thread context (see tick_sample_poll)
     simple_watchdog_kick();
     sound_tick();
 
@@ -304,6 +320,10 @@ int main(void) {
   current_board->set_can_mode(CAN_MODE_NORMAL);
   harness_init();
 
+  // seed the ADC caches before interrupts are live
+  voltage_mV = current_board->read_voltage_mV();
+  current_mA = current_board->read_current_mA();
+
   // panda has an FPU, let's use it!
   enable_fpu();
 
@@ -347,6 +367,7 @@ int main(void) {
 
   // LED should keep on blinking all the time
   while (true) {
+    tick_sample_poll();
     if (power_save_status == POWER_SAVE_STATUS_DISABLED) {
       #ifdef DEBUG_FAULTS
       if (fault_status == FAULT_STATUS_NONE) {
@@ -357,6 +378,7 @@ int main(void) {
           delay(fade >> 4);
           led_set(LED_RED, false);
           delay((MAX_LED_FADE - fade) >> 4);
+          tick_sample_poll();
         }
 
         for (uint32_t fade = MAX_LED_FADE; fade > 0U; fade -= 1U) {
@@ -364,6 +386,7 @@ int main(void) {
           delay(fade >> 4);
           led_set(LED_RED, false);
           delay((MAX_LED_FADE - fade) >> 4);
+          tick_sample_poll();
         }
 
       #ifdef DEBUG_FAULTS

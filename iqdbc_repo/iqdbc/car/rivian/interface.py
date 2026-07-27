@@ -4,7 +4,7 @@ from iqdbc.car.rivian.carcontroller import CarController
 from iqdbc.car.rivian.carstate import CarState
 from iqdbc.car.rivian.radar_interface import RadarInterface
 from iqdbc.car.rivian.values import RivianSafetyFlags
-from iqdbc.iqpilot.car.rivian.values import RivianFlagsIQ
+from iqdbc.lvbs.car.rivian.values import RivianFlagsIQ
 
 
 class CarInterface(CarInterfaceBase):

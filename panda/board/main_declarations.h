@@ -13,6 +13,10 @@ extern uint8_t hw_type;
 extern board *current_board;
 extern uint32_t uptime_cnt;
 
+// ADC results, sampled in thread context (see tick_sample_poll in main.c)
+extern uint32_t voltage_mV;
+extern uint32_t current_mA;
+
 // heartbeat state
 extern uint32_t heartbeat_counter;
 extern bool heartbeat_lost;

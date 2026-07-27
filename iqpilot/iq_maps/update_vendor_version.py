@@ -14,12 +14,14 @@ from openpilot.common.basedir import BASEDIR
 from openpilot.iqpilot.iq_maps import VENDOR_MAPD_PATH
 from openpilot.iqpilot.iq_maps.vendor_mapd_installer import (
   VENDOR_RELEASE_TAG,
-  get_file_hash,
+  sha256_of_file,
 )
 
 _RELEASE_SYMBOL = "VENDOR_RELEASE_TAG"
 _INSTALLER_SRC = os.path.join(BASEDIR, "iqpilot", "iq_maps", "vendor_mapd_installer.py")
-_HASH_FILE = os.path.join(BASEDIR, "iqpilot", "iq_maps", "tests", "mapd_hash")
+# public: the checked-in hash the version test compares the installed binary against
+HASH_FILE = os.path.join(BASEDIR, "iqpilot", "iq_maps", "tests", "mapd_hash")
+_HASH_FILE = HASH_FILE
 _TAG_ASSIGN = re.compile(rf'^{_RELEASE_SYMBOL}\s*=\s*["\'][^"\']*["\']', re.MULTILINE)
 
 
@@ -39,7 +41,7 @@ def rewrite_pinned_tag(new_tag: str) -> bool:
 
 
 def refresh_hash_file() -> None:
-  digest = get_file_hash(VENDOR_MAPD_PATH)
+  digest = sha256_of_file(VENDOR_MAPD_PATH)
   with open(_HASH_FILE, "w") as f:
     f.write(digest)
   print(f"wrote binary hash {digest} -> {_HASH_FILE}")

@@ -5,7 +5,7 @@ from iqdbc.car.chrysler.carstate import CarState
 from iqdbc.car.chrysler.radar_interface import RadarInterface
 from iqdbc.car.chrysler.values import CAR, RAM_HD, RAM_DT, RAM_CARS, ChryslerFlags, ChryslerSafetyFlags
 from iqdbc.car.interfaces import CarInterfaceBase
-from iqdbc.iqpilot.car.chrysler.values_ext import ChryslerFlagsIQ
+from iqdbc.lvbs.car.chrysler.iq_values import ChryslerFlagsIQ
 
 
 class CarInterface(CarInterfaceBase):

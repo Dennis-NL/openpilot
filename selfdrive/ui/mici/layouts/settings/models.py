@@ -10,7 +10,7 @@ import pyray as rl
 
 from cereal import custom
 
-from openpilot.system.ui.iqpilot.widgets.helpers.glyphs import draw_star
+from openpilot.system.ui.iqwidgets.widgets.helpers.glyphs import draw_star
 
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app
@@ -96,10 +96,10 @@ class ModelsLayoutMici(NavScroller):
     self._redownload_icon = gui_app.texture("icons_mici/settings/device/update.png", 56, 56, keep_aspect_ratio=True)
     self._reset_icon = gui_app.texture("icons_mici/wheel.png", 56, 56)
 
-    self._current = BigButton("current model")
+    self._current = BigButton("active model")
     self._current.set_click_callback(self._show_folders)
 
-    self._cancel = BigButton("cancel download")
+    self._cancel = BigButton("stop download")
     self._cancel.set_click_callback(self._cancel_model_request)
     self._cancel.set_visible(self._is_downloading)
 
@@ -107,17 +107,17 @@ class ModelsLayoutMici(NavScroller):
     self._redownload.set_click_callback(self._confirm_redownload_model)
     self._redownload.set_enabled(self._can_redownload)
 
-    self._refresh = BigButton("refresh model list")
+    self._refresh = BigButton("reload model list")
     self._refresh.set_click_callback(lambda: ui_state.params.put("ModelManager_LastSyncTime", 0))
 
-    self._supercombo = GreyBigButton("driving model")
+    self._supercombo = GreyBigButton("combined model")
     self._supercombo.set_visible(False)
-    self._vision = GreyBigButton("vision model")
+    self._vision = GreyBigButton("vision weights")
     self._vision.set_visible(False)
-    self._policy = GreyBigButton("policy model")
+    self._policy = GreyBigButton("policy weights")
     self._policy.set_visible(False)
 
-    self._clear = BigButton("clear model cache")
+    self._clear = BigButton("purge model cache")
     self._clear.set_click_callback(self._confirm_clear_cache)
     self._clear.set_enabled(lambda: ui_state.is_offroad())
 
@@ -125,7 +125,7 @@ class ModelsLayoutMici(NavScroller):
     self._sw_delay = MappedParamToggle("manual delay offset", "IQSoftwareSteerDelay", _DELAY_OPTIONS, _DELAY_VALUES)
     self._sw_delay.set_visible(lambda: not self._steer_delay._checked)
 
-    self._lane_turn = BigParamControl("use lane turn desires", "IQLaneTurnDesire")
+    self._lane_turn = BigParamControl("low-speed turn planning", "IQLaneTurnDesire")
     self._lane_speed = MappedParamToggle("lane turn speed", "IQLaneTurnValue", _LANE_TURN_OPTIONS, _LANE_TURN_VALUES)
     self._lane_speed.set_visible(lambda: self._lane_turn._checked)
 

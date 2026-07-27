@@ -18,7 +18,7 @@ from iqdbc.car.values import PLATFORMS
 from iqdbc.can import CANParser
 from iqdbc.car.carlog import carlog
 
-from iqdbc.iqpilot.car.interfaces import CarInterfaceBaseIQ
+from iqdbc.lvbs.car.interfaces import CarInterfaceBaseIQ
 
 GearShifter = structs.CarState.GearShifter
 ButtonType = structs.CarState.ButtonEvent.Type

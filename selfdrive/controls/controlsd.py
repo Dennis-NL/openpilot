@@ -260,7 +260,7 @@ class Controls(IQControlsLayer):
       hudControl.leadFollowTime = 1.45
     hudControl.visualAlert = self.sm['selfdriveState'].alertHudVisual
     hudControl.audibleAlert = self.sm['selfdriveState'].alertSound
-    hudControl.driverUnresponsive = self.sm['selfdriveState'].alertType.split('/', 1)[0] == 'driverUnresponsive'
+    hudControl.driverUnresponsive = self.sm['driverMonitoringState'].noResponseForceDecel
 
     hudControl.rightLaneVisible = True
     hudControl.leftLaneVisible = True
@@ -292,7 +292,7 @@ class Controls(IQControlsLayer):
     cs.upAccelCmd = float(self.LoC.pid.p)
     cs.uiAccelCmd = float(self.LoC.pid.i)
     cs.ufAccelCmd = float(self.LoC.pid.f)
-    cs.forceDecel = bool((self.sm['driverMonitoringState'].awarenessStatus < 0.) or
+    cs.forceDecel = bool(self.sm['driverMonitoringState'].noResponseForceDecel or
                          (self.sm['selfdriveState'].state == State.softDisabling))
 
     lat_tuning = self.CP.lateralTuning.which()

@@ -42,7 +42,9 @@ if not _os.path.exists("/usr/libexec/iqpilot/runtime_integrity.json"):
     "update_mlb_carstate_alc_state": _noop,
     "update_pq_carstate_alc_state": _noop,
   })
-  _stub_module("iqpilot_private.konn3kt.iqlvbs.iqlvbs_commander", {})
+  _stub_module("iqpilot_private.konn3kt.iqlvbs.iqlvbs_commander", {
+    "update_turn_signals": _noop,
+  })
   _stub_module("iqpilot_private.konn3kt.hephaestus.vw_pq_flasher", {})
 
   try:

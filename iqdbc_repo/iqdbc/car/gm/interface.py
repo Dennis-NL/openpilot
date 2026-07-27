@@ -10,8 +10,8 @@ from iqdbc.car.gm.radar_interface import RadarInterface, RADAR_HEADER_MSG, CAMER
 from iqdbc.car.gm.values import CAR, CarControllerParams, EV_CAR, CAMERA_ACC_CAR, SDGM_CAR, ALT_ACCS, CanBus, GMSafetyFlags
 from iqdbc.car.interfaces import CarInterfaceBase, TorqueFromLateralAccelCallbackType, LateralAccelFromTorqueCallbackType
 
-from iqdbc.iqpilot.car.gm.interface_ext import CarInterfaceExt
-from iqdbc.iqpilot.car.gm.values_ext import GMFlagsIQ, GMSafetyFlagsIQ
+from iqdbc.lvbs.car.gm.iq_interface import IQCarInterface
+from iqdbc.lvbs.car.gm.iq_values import GMFlagsIQ, GMSafetyFlagsIQ
 
 TransmissionType = structs.CarParams.TransmissionType
 NetworkLocation = structs.CarParams.NetworkLocation
@@ -30,7 +30,7 @@ NON_LINEAR_TORQUE_PARAMS = {
 }
 
 
-class CarInterface(CarInterfaceBase, CarInterfaceExt):
+class CarInterface(CarInterfaceBase, IQCarInterface):
   CarState = CarState
   CarController = CarController
   RadarInterface = RadarInterface
@@ -40,7 +40,7 @@ class CarInterface(CarInterfaceBase, CarInterfaceExt):
 
   def __init__(self, CP, CP_IQ):
     CarInterfaceBase.__init__(self, CP, CP_IQ)
-    CarInterfaceExt.__init__(self, CP, CarInterfaceBase)
+    IQCarInterface.__init__(self, CP, CarInterfaceBase)
 
   @staticmethod
   def get_pid_accel_limits(CP, CP_IQ, current_speed, cruise_speed):

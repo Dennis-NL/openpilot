@@ -504,7 +504,7 @@ class CarState(CarStateBase):
     ret.gasPressed = pt_cp.vl["Motor_3"]["MO3_Pedalwert"] > 0
     ret.brake = pt_cp.vl["Bremse_5"]["BR5_Bremsdruck"] / 250.0  # FIXME: this is pressure in Bar, not sure what OP expects
     ret.brakePressed = bool(pt_cp.vl["Motor_2"]["MO2_BLS"])
-    ret.parkingBrake = False # bool(pt_cp.vl["Kombi_1"]["Bremsinfo"])
+    ret.parkingBrake = bool(pt_cp.vl["Kombi_1"]["Bremsinfo"])
 
     # Update gear and/or clutch position data.
     if self.CP.transmissionType == TransmissionType.automatic:
@@ -639,8 +639,8 @@ class CarState(CarStateBase):
 
     ret.lowSpeedAlert = self.update_low_speed_alert(ret.vEgo)
 
-    ret.fuelGauge = 0 # pt_cp.vl["Kombi_1"]["Tankinhalt"] / 55.0
-    ret.fuelTankLevelL = 0 # pt_cp.vl["Kombi_1"]["Tankinhalt"]  # raw liters for konn3kt
+    ret.fuelGauge = pt_cp.vl["Kombi_1"]["Tankinhalt"] / 55.0
+    ret.fuelTankLevelL = pt_cp.vl["Kombi_1"]["Tankinhalt"]  # raw liters for konn3kt
     if aux_cp is not None:
       self._update_odometer(ret, aux_cp.vl["Kombi_3"]["Kilometerstand"])
 

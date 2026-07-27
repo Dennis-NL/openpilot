@@ -13,7 +13,7 @@ from openpilot.selfdrive.car.cruise import V_CRUISE_MAX
 from openpilot.iqpilot.selfdrive.controls.lib.custom_stop_distance import CustomStopDistance
 from openpilot.iqpilot.selfdrive.controls.lib.iq_dynamic.engine import IQDynamicController
 from openpilot.iqpilot.selfdrive.controls.lib.iq_dynamic.imahelper import IQConstants
-from openpilot.iqpilot.selfdrive.controls.lib.helpers.e2e_alerts import E2EAlertsHelper
+from openpilot.iqpilot.selfdrive.controls.lib.helpers.e2e_alerts import EndToEndAlertEngine
 from openpilot.iqpilot.selfdrive.controls.lib.slc_vcruise import SLCVCruise
 from openpilot.iqpilot.selfdrive.controls.lib.speed_limit_controller import LIMIT_ADAPT_ACC
 from openpilot.iqpilot.selfdrive.selfdrived.events import IQEvents
@@ -34,7 +34,7 @@ class LongitudinalPlannerIQ:
     self.slimit = SLCVCruise()
     self.generation = int(model_bundle.generation) if (model_bundle := get_active_bundle()) else None
     self.source = LongitudinalPlanSource.cruise
-    self.iqmodeloutput = E2EAlertsHelper()
+    self.e2e_alerts = EndToEndAlertEngine()
     self.output_v_target = 0.
     self.output_a_target = 0.
     self.speed_limit_last = 0.
@@ -146,7 +146,7 @@ class LongitudinalPlannerIQ:
     for event_name in getattr(self.slimit, 'pending_events', []):
       self.events_iq.add(event_name)
     self.custom_stop_distance.update()
-    self.iqmodeloutput.update(sm, self.events_iq)
+    self.e2e_alerts.update(sm, self.events_iq)
     if bool(getattr(sm["iqCarState"], "alcOverrideAlert", False)):
       self.events_iq.add(custom.IQOnroadEvent.EventName.steeringOverrideReengageAlc)
 
@@ -244,10 +244,9 @@ class LongitudinalPlannerIQ:
       assist.vTarget = float(self.output_v_target if assist.active else 255.)
       assist.aTarget = float(self.slimit.slc_a_target if assist.active else 0.)
 
-      # E2E Alerts
       e2eAlerts = plan_msg.e2eAlerts
-      e2eAlerts.greenLightAlert = self.iqmodeloutput.queue_alert
-      e2eAlerts.leadDepartAlert = self.iqmodeloutput.lead_alert
+      e2eAlerts.pathOpen = self.e2e_alerts.path_alert
+      e2eAlerts.leadPullaway = self.e2e_alerts.lead_alert
 
     valid = sm.all_checks(service_list=['carState', 'controlsState'])
 

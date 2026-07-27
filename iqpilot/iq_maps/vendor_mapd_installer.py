@@ -34,7 +34,7 @@ _NET_PROBE_ATTEMPTS = 10
 _NET_PROBE_INTERVAL_S = 2
 
 
-def get_file_hash(path: str) -> str:
+def sha256_of_file(path: str) -> str:
   """Hex SHA-256 digest of a file on disk."""
   digest = hashlib.sha256()
   with open(path, "rb") as handle:
@@ -103,7 +103,7 @@ class VendorMapdInstaller:
     if not reference:
       return True
     try:
-      return get_file_hash(VENDOR_MAPD_PATH) == reference
+      return sha256_of_file(VENDOR_MAPD_PATH) == reference
     except OSError:
       return False
 

@@ -11,12 +11,12 @@ from openpilot.selfdrive.ui.mici.onroad.torque_bar import TorqueBar
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.onroad.hud_renderer import HudRenderer
 from openpilot.iqpilot.ui.onroad.hud_overlays import (
-  DeveloperUiRenderer,
+  IQDevMetricsOverlay,
   RoadNameRenderer,
-  RocketFuel,
-  SpeedLimitRenderer,
-  TurnSignalController,
-  SpeedRenderer,
+  IQAccelBar,
+  IQSpeedLimitOverlay,
+  IQTurnSignalOverlay,
+  IQSpeedOverlay,
 )
 from openpilot.iqpilot.ui.onroad.nav_map_panel import NavMapPanel
 from openpilot.iqpilot.ui.onroad.soft_warning import SoftWarningRenderer
@@ -28,13 +28,13 @@ ENABLE_SPLIT_NAV_MAP_PANEL = True
 class IQHudRenderer(HudRenderer):
   def __init__(self):
     super().__init__()
-    self.developer_ui = DeveloperUiRenderer()
+    self.developer_ui = IQDevMetricsOverlay()
     self.nav_map_panel = NavMapPanel()
     self.road_name_renderer = RoadNameRenderer()
-    self.rocket_fuel = RocketFuel()
-    self.speed_limit_renderer = SpeedLimitRenderer()
-    self.turn_signal_controller = TurnSignalController()
-    self.speed_renderer = SpeedRenderer()
+    self.rocket_fuel = IQAccelBar()
+    self.speed_limit_renderer = IQSpeedLimitOverlay()
+    self.turn_signal_controller = IQTurnSignalOverlay()
+    self.speed_renderer = IQSpeedOverlay()
     self.soft_warning_renderer = SoftWarningRenderer()
     self._torque_bar = TorqueBar(scale=3.0, always=True)
 
@@ -59,8 +59,8 @@ class IQHudRenderer(HudRenderer):
 
     if ui_state.torque_bar:
       torque_rect = rect
-      if ui_state.developer_ui in (DeveloperUiRenderer.DEV_UI_BOTTOM, DeveloperUiRenderer.DEV_UI_BOTH):
-        torque_rect = rl.Rectangle(rect.x, rect.y, rect.width, rect.height - DeveloperUiRenderer.BOTTOM_BAR_HEIGHT)
+      if ui_state.developer_ui in (IQDevMetricsOverlay.DEV_UI_BOTTOM, IQDevMetricsOverlay.DEV_UI_BOTH):
+        torque_rect = rl.Rectangle(rect.x, rect.y, rect.width, rect.height - IQDevMetricsOverlay.BOTTOM_BAR_HEIGHT)
       self._torque_bar.render(torque_rect)
 
     if not self.split_nav_enabled():
