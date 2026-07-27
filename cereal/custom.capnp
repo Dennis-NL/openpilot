@@ -315,6 +315,9 @@ struct IQOnroadEvent @0xf4621d3ee9233bc9 {
 
     # construction zone assist
     constructionZoneDetected @30;
+
+    # model management
+    modelUpdating @31;
   }
 }
 

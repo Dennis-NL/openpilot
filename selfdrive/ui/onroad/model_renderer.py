@@ -12,7 +12,7 @@ from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
 from openpilot.system.ui.widgets import Widget
 
-from openpilot.iqpilot.ui.onroad.model_renderer import ChevronMetrics, IQModelRenderer
+from openpilot.iqpilot.ui.onroad.hud_overlays import ChevronMetrics
 from openpilot.iqpilot.ui.onroad.lead_confidence import driving_confidence
 
 CLIP_MARGIN = 500
@@ -68,10 +68,9 @@ class VisionDot:
 _VD_EASE = 0.4
 
 
-class ModelRenderer(Widget, IQModelRenderer):
+class ModelRenderer(Widget):
   def __init__(self):
     Widget.__init__(self)
-    IQModelRenderer.__init__(self)
     self.chevron_metrics = ChevronMetrics()
     self._lead_orb = gui_app.texture("icons/lead_orb.png", 256, 256)
     self._longitudinal_control = False
@@ -433,9 +432,6 @@ class ModelRenderer(Widget, IQModelRenderer):
     allow_throttle = sm['longitudinalPlan'].allowThrottle or not self._longitudinal_control
     self._blend_filter.update(int(allow_throttle))
 
-    if ui_state.rainbow_path:
-      self.rainbow_path.draw_rainbow_path(self._rect, self._path)
-      return
 
     if self._experimental_mode:
       # Draw with acceleration coloring

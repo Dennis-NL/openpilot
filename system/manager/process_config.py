@@ -79,7 +79,7 @@ def navrenderd_onroad(started: bool, params: Params, CP: car.CarParams) -> bool:
 
 def iqmapd_needed(params: Params) -> bool:
   return (
-    params.get_bool("RoadNameToggle")
+    params.get_bool("IQRoadNameOverlay")
     or params.get_bool("ShowSpeedLimits")
     or params.get_bool("SpeedLimitController")
     or params.get_bool("EnableSpeedLimitControl")
