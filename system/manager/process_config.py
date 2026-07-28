@@ -200,7 +200,7 @@ procs += [
   BundleProcess("iqvd", "iqpilot_iqvd_private", "iqpilot_private.iqvd.iqvd", iqvd_onroad, restart_if_crash=True),
 
   # mapd
-  NativeProcess("mapd", "third_party/mapd_pfeiferj", ["./mapd"], mapd_onroad),
+  NativeProcess("mapd", "third_party/mapd_pfeiferj", ["./mapd"], mapd_onroad, restart_if_crash=True),
   PythonProcess("mapd_manager", "iqpilot.iq_maps.orchestrator", and_(only_offroad, not_low_power)),
 
   # locationd

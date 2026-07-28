@@ -57,6 +57,8 @@ TurnDirection = custom.IQTurnSignalDirection
 
 IGNORED_SAFETY_MODES = (SafetyModel.silent, SafetyModel.noOutput)
 
+NON_BLOCKING_PROCESSES = {'mapd', 'iqmapd', 'navd', 'navrenderd'}
+
 
 def _cleanup_startup_params(CP: car.CarParams, params: Params) -> None:
   if not CP.alphaLongitudinalAvailable or not CP.openpilotLongitudinalControl:
@@ -159,10 +161,10 @@ class SelfdriveD(GapButtonActions):
     self.state_machine = StateMachine()
     self.rk = Ratekeeper(100, print_delay_threshold=None)
 
-    self.ignored_processes = set()
+    self.ignored_processes = set(NON_BLOCKING_PROCESSES)
     nvme_expected = os.path.exists('/dev/nvme0n1') or (not os.path.isfile("/persist/comma/living-in-the-moment"))
     if HARDWARE.get_device_type() == 'tici' and nvme_expected:
-      self.ignored_processes = {'loggerd', }
+      self.ignored_processes.add('loggerd')
 
     # Determine startup event
     is_remote = build_metadata.openpilot.comma_remote or build_metadata.openpilot.iqpilot_remote
