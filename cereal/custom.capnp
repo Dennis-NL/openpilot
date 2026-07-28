@@ -332,6 +332,7 @@ struct IQCarParams @0xd4189b5c8aca9f78 {
 
   iqLateralNet @4 :LateralNet;
   longitudinalStoppingSpeedOverride @5 :Float32;  # m/s; zero keeps the upstream default
+  stoppingDecelRateOverride @6 :Float32;          # m/s^3; zero keeps the upstream default
 
   struct LateralNet {
     fuzzyFingerprint @0 :Bool;
