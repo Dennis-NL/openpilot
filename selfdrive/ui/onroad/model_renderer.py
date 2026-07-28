@@ -451,18 +451,19 @@ class ModelRenderer(Widget):
       )
       draw_polygon(self._rect, self._path.projected_points, gradient=gradient)
 
+  # concentric layers (outer faint -> inner bright) build a soft center-out glow using only
+  # draw_circle, which is signature-stable across raylib versions (draw_circle_gradient is not)
+  _VD_GLOW = ((1.0, 26), (0.72, 38), (0.48, 54), (0.26, 78))
+
   def _draw_vision_dots(self):
     for dot in self._vision_dots:
       a = dot.alpha
       if a <= 0.02:
         continue
-      x, y, r = int(dot.x), int(dot.y), dot.radius
-      if dot.rgb is None:
-        # soft teal glow, brighter in the center fading to transparent at the edge
-        rl.draw_circle_gradient(x, y, r, rl.Color(120, 235, 225, int(165 * a)), rl.Color(0, 150, 150, 0))
-      else:
-        rl.draw_circle_gradient(x, y, r, rl.Color(dot.rgb[0], dot.rgb[1], dot.rgb[2], int(210 * a)),
-                                rl.Color(dot.rgb[0], dot.rgb[1], dot.rgb[2], 0))
+      x, y = int(dot.x), int(dot.y)
+      cr, cg, cb = (40, 210, 200) if dot.rgb is None else dot.rgb
+      for frac, base in self._VD_GLOW:
+        rl.draw_circle(x, y, dot.radius * frac, rl.Color(cr, cg, cb, int(base * a)))
 
   def _draw_track_dots(self):
     src = rl.Rectangle(0, 0, self._lead_orb.width, self._lead_orb.height)
