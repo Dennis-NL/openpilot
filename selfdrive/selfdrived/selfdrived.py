@@ -745,7 +745,16 @@ class SelfdriveD(GapButtonActions):
       self.is_ldw_enabled = self.params.get_bool("IsLdwEnabled")
       self.disengage_on_accelerator = self.params.get_bool("DisengageOnAccelerator")
       self.experimental_mode = self.params.get_bool("ExperimentalMode") and self.CP.openpilotLongitudinalControl
-      self.personality = self.params.get("LongitudinalPersonality", return_default=True)
+      # Params can be changed while selfdrived is running. Keep the live value in
+      # the same valid enum range enforced during startup; otherwise a stale value
+      # (for example 3) makes the alert callback lookup raise KeyError and kills
+      # selfdrived.
+      self.personality = get_sanitize_int_param(
+        "LongitudinalPersonality",
+        min(log.LongitudinalPersonality.schema.enumerants.values()),
+        max(log.LongitudinalPersonality.schema.enumerants.values()),
+        self.params,
+      )
       self.nav_exit_lane_change = self._read_nav_exit_lane_change()
       self.model_download_pending = self.params.get("ModelManager_DownloadIndex") is not None
 
