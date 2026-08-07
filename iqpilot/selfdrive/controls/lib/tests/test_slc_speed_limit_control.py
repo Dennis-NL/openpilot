@@ -2,9 +2,11 @@
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
 """
 
+from datetime import datetime
 from types import SimpleNamespace
 
 from openpilot.common.constants import CV
+from openpilot.iqpilot.common.slc_variables import OFFSET_MAP_IMPERIAL
 from openpilot.iqpilot.selfdrive.controls.lib.slc_vcruise import SLCVCruise, CRUISING_SPEED
 from openpilot.iqpilot.selfdrive.controls.lib.speed_limit_controller import SpeedLimitController, POLICY_MAP_DATA_PRIORITY, POLICY_COMBINED
 
@@ -92,7 +94,7 @@ def test_speed_limit_controller_resolves_source_by_priority():
   slc_params = _base_slc_params_controller()
   slc_params["slc_policy"] = POLICY_MAP_DATA_PRIORITY
 
-  controller.update_limits(25.0, None, True, 30.0, 27.0, sm, slc_params)
+  controller.update_limits(25.0, datetime.now(), True, 30.0, 27.0, sm, slc_params)
   assert controller.active_source == "Map Data"
   assert controller.active_target == 18.0
 
@@ -112,7 +114,7 @@ def test_speed_limit_controller_combined_mode_prefers_smallest_limit():
   slc_params = _base_slc_params_controller()
   slc_params["slc_policy"] = POLICY_COMBINED
 
-  controller.update_limits(28.0, None, True, 31.0, 27.0, sm, slc_params)
+  controller.update_limits(28.0, datetime.now(), True, 31.0, 27.0, sm, slc_params)
   assert controller.active_source == "Map Data"
   assert controller.active_target == 16.0
 
@@ -128,6 +130,7 @@ def test_slc_vcruise_applies_target_without_increasing_cruise():
 
   slc._get_slc_params = lambda: {
     "speed_limit_controller": True,
+    "speed_limit_mode": 3,
     "show_speed_limits": False,
     "is_metric": True,
     "slc_policy": POLICY_MAP_DATA_PRIORITY,
@@ -163,6 +166,7 @@ def test_slc_vcruise_show_only_does_not_modify_cruise():
   slc.slc.active_source = "Map Data"
   slc._get_slc_params = lambda: {
     "speed_limit_controller": False,
+    "speed_limit_mode": 1,
     "show_speed_limits": True,
     "is_metric": True,
     "slc_policy": POLICY_MAP_DATA_PRIORITY,
@@ -198,6 +202,7 @@ def test_slc_vcruise_auto_raises_for_higher_limit_when_confirmation_disabled():
 
   slc._get_slc_params = lambda: {
     "speed_limit_controller": True,
+    "speed_limit_mode": 3,
     "show_speed_limits": False,
     "is_metric": True,
     "slc_policy": POLICY_MAP_DATA_PRIORITY,
@@ -232,6 +237,7 @@ def test_slc_vcruise_does_not_auto_raise_when_higher_confirmation_enabled():
 
   slc._get_slc_params = lambda: {
     "speed_limit_controller": True,
+    "speed_limit_mode": 3,
     "show_speed_limits": False,
     "is_metric": True,
     "slc_policy": POLICY_MAP_DATA_PRIORITY,
@@ -390,6 +396,50 @@ def test_construction_zone_never_raises_cruise_even_with_auto_raise():
   sm = _build_sm(v_cruise_cluster=v_cruise * CV.MS_TO_KPH, v_ego_cluster=33.0)
   out = slc.update(apply_enabled=True, now=None, time_validated=True, v_cruise=v_cruise, v_ego=33.0, sm=sm)
   assert abs(out - 60.0 * CV.MPH_TO_MS) < 1e-6
+
+
+def _offset_controller(pct1=10.0, pct2=5.0, pct3=8.0):
+  params = FakeParams()
+  params.put("speed_limit_offset1", pct1)
+  params.put("speed_limit_offset2", pct2)
+  params.put("speed_limit_offset3", pct3)
+  controller = SpeedLimitController(params)
+  controller._assist.source = "Map Data"
+  return controller
+
+
+def test_get_offset_percent_per_zone():
+  controller = _offset_controller()
+
+  controller._assist.target = 6.7  # ~15 mph -> zone 1
+  assert abs(controller.get_offset(False) - 6.7 * 0.10) < 1e-9
+
+  controller._assist.target = 13.4  # ~30 mph -> zone 2
+  assert abs(controller.get_offset(False) - 13.4 * 0.05) < 1e-9
+
+  controller._assist.target = 31.3  # ~70 mph -> zone 3 (open-ended)
+  assert abs(controller.get_offset(False) - 31.3 * 0.08) < 1e-9
+
+
+def test_get_offset_zone_lower_bound_inclusive():
+  controller = _offset_controller()
+  boundary = OFFSET_MAP_IMPERIAL[1][0]
+  controller._assist.target = boundary
+  assert abs(controller.get_offset(False) - boundary * 0.05) < 1e-9
+
+
+def test_get_offset_zero_without_real_limit_source():
+  for source in ("None", "Construction"):
+    controller = _offset_controller()
+    controller._assist.source = source
+    controller._assist.target = 30.0
+    assert controller.get_offset(False) == 0.0
+
+
+def test_get_offset_percent_clamped():
+  controller = _offset_controller(pct3=500.0)
+  controller._assist.target = 30.0
+  assert abs(controller.get_offset(False) - 30.0 * 0.50) < 1e-9
 
 
 def test_construction_zone_fires_event_once_per_zone_entry():

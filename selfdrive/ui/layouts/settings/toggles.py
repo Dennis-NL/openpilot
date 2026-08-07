@@ -41,6 +41,10 @@ DESCRIPTIONS = {
   "DashcamEnabled": tr_noop("Record and upload driving data and video. Disabling this stops all recording! No logs, no video, no audio."),
   'RecordFront': tr_noop("Upload data from the driver facing camera and help improve the driver monitoring algorithm."),
   "IsMetric": tr_noop("Display speed in km/h instead of mph."),
+  "IQAutoUnits": tr_noop(
+    "Set the units from the device location. Speeds switch to km/h everywhere except the United States, " +
+    "the United Kingdom and Liberia, and are re-checked when you cross a border."
+  ),
   "RecordAudio": tr_noop("Record and store microphone audio while driving. The audio will be included in the dashcam video in Konn3kt."),
   "LongitudinalControlMode": tr_noop(
     "Choose longitudinal behavior: IQ.Pilot (IQ longitudinal + end-to-end), "
@@ -92,6 +96,12 @@ class TogglesLayout(Widget):
       "IsMetric": (
         lambda: tr("Use Metric System"),
         DESCRIPTIONS["IsMetric"],
+        "metric.png",
+        False,
+      ),
+      "IQAutoUnits": (
+        lambda: tr("Set Units From Location"),
+        DESCRIPTIONS["IQAutoUnits"],
         "metric.png",
         False,
       ),
@@ -296,6 +306,8 @@ class TogglesLayout(Widget):
 
   def _toggle_callback(self, state: bool, param: str):
     self._params.put_bool(param, state)
+    if param == "IQAutoUnits" and state:
+      self._params.remove("IQAutoUnitsRegion")
     if self._toggle_defs[param][3]:
       self._params.put_bool("OnroadCycleRequested", True)
 

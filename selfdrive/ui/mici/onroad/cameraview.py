@@ -4,7 +4,7 @@ import pyray as rl
 
 from msgq.visionipc import VisionIpcClient, VisionStreamType, VisionBuf
 from openpilot.common.swaglog import cloudlog
-from openpilot.system.hardware import TICI
+from openpilot.system.hardware import EGL_DMA_BUF_SUPPORTED
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.egl import init_egl, create_egl_image, destroy_egl_image, bind_egl_image_to_texture, EGLImage
 from openpilot.system.ui.widgets import Widget
@@ -38,7 +38,7 @@ void main() {
 """
 
 # Choose fragment shader based on platform capabilities
-if TICI:
+if EGL_DMA_BUF_SUPPORTED:
   FRAME_FRAGMENT_SHADER = """
     #version 300 es
     #extension GL_OES_EGL_image_external_essl3 : enable
@@ -121,7 +121,7 @@ class CameraView(Widget):
     self._texture_needs_update = True
     self.last_connection_attempt: float = 0.0
     self.shader = rl.load_shader_from_memory(VERTEX_SHADER, FRAME_FRAGMENT_SHADER)
-    self._texture1_loc: int = rl.get_shader_location(self.shader, "texture1") if not TICI else -1
+    self._texture1_loc: int = rl.get_shader_location(self.shader, "texture1") if not EGL_DMA_BUF_SUPPORTED else -1
     self._engaged_loc = rl.get_shader_location(self.shader, "engaged")
     self._engaged_val = rl.ffi.new("int[1]", [1])
     self._enhance_driver_loc = rl.get_shader_location(self.shader, "enhance_driver")
@@ -137,8 +137,8 @@ class CameraView(Widget):
 
     self._placeholder_color: rl.Color | None = None
 
-    # Initialize EGL for zero-copy rendering on TICI
-    if TICI:
+    # Initialize EGL for zero-copy rendering on comma 3/3X.
+    if EGL_DMA_BUF_SUPPORTED:
       if not init_egl():
         raise RuntimeError("Failed to initialize EGL")
 
@@ -189,7 +189,7 @@ class CameraView(Widget):
     self._clear_textures()
 
     # Clean up EGL texture
-    if TICI and self.egl_texture:
+    if EGL_DMA_BUF_SUPPORTED and self.egl_texture:
       rl.unload_texture(self.egl_texture)
       self.egl_texture = None
 
@@ -264,7 +264,7 @@ class CameraView(Widget):
     dst_rect = rl.Rectangle(x_offset, y_offset, scale_x, scale_y)
 
     # Render with appropriate method
-    if TICI:
+    if EGL_DMA_BUF_SUPPORTED:
       self._render_egl(src_rect, dst_rect)
     else:
       self._render_textures(src_rect, dst_rect)
@@ -387,12 +387,12 @@ class CameraView(Widget):
     self._initialize_textures()
 
   def _initialize_textures(self):
-      self._clear_textures()
-      if not TICI:
-        self.texture_y = rl.load_texture_from_image(rl.Image(None, int(self.client.stride),
-          int(self.client.height), 1, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_GRAYSCALE))
-        self.texture_uv = rl.load_texture_from_image(rl.Image(None, int(self.client.stride // 2),
-          int(self.client.height // 2), 1, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_GRAY_ALPHA))
+    self._clear_textures()
+    if not EGL_DMA_BUF_SUPPORTED:
+      self.texture_y = rl.load_texture_from_image(rl.Image(None, int(self.client.stride),
+        int(self.client.height), 1, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_GRAYSCALE))
+      self.texture_uv = rl.load_texture_from_image(rl.Image(None, int(self.client.stride // 2),
+        int(self.client.height // 2), 1, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_GRAY_ALPHA))
 
   def _clear_textures(self):
     if self.texture_y and self.texture_y.id:
@@ -404,7 +404,7 @@ class CameraView(Widget):
       self.texture_uv = None
 
     # Clean up EGL resources
-    if TICI:
+    if EGL_DMA_BUF_SUPPORTED:
       for data in self.egl_images.values():
         destroy_egl_image(data)
       self.egl_images = {}

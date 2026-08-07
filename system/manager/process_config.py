@@ -98,7 +98,9 @@ def constructiond_onroad(started: bool, params: Params, CP: car.CarParams) -> bo
   return started and params.get_bool("ConstructionZoneAssist")
 
 def iqvd_onroad(started: bool, params: Params, CP: car.CarParams) -> bool:
-  return started and params.get_bool("VisionVehicleTracks")
+  # held for 1.0d: iqvd runs a detector per frame and the added load is not
+  # something 1.0c needs to carry. re-enable by restoring the param check.
+  return False
 
 def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:
   return not started
@@ -108,6 +110,12 @@ def livestream(started: bool, params: Params, CP: car.CarParams) -> bool:
   # manager brings up the stream encoder (and camerad/webrtcd when offroad) and tears them
   # down cleanly when the session ends — no subprocess management inside hephaestusd.
   return params.get_bool("IsLiveStreaming")
+
+def canlive(started: bool, params: Params, CP: car.CarParams) -> bool:
+  # Remote live CAN debugging via konn3kt. hephaestusd sets CanLiveStreaming when a viewer
+  # connects (startCanLive) and clears it when the last one leaves (stopCanLive), so canlived
+  # runs only during an active debug session — no idle connection or battery cost otherwise.
+  return params.get_bool("CanLiveStreaming")
 
 def is_tinygrad_model(started, params, CP: car.CarParams) -> bool:
   """Check if the active model runner is tinygrad."""
@@ -179,6 +187,7 @@ procs = [
   # debug procs
   NativeProcess("bridge", "cereal/messaging", ["./bridge"], notcar),
   PythonProcess("webrtcd", "system.webrtc.webrtcd", or_(iscar, livestream)),
+  PythonProcess("canlived", "iqpilot.konn3kt.canlive.canlived", canlive),
   PythonProcess("webjoystick", "tools.bodyteleop.web", notcar),
 ]
 

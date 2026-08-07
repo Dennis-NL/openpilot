@@ -53,6 +53,7 @@ class IQCarParams:
   enableGasInterceptor: bool = auto_field()
   longitudinalStoppingSpeedOverride: float = auto_field()
   stoppingDecelRateOverride: float = auto_field()
+  longActiveWithGasOverride: bool = auto_field()
 
   iqLateralNet: 'IQCarParams.LateralNet' = field(default_factory=lambda: IQCarParams.LateralNet())
 

@@ -8,15 +8,13 @@
 #include <QScrollArea>
 #include <QTimer>
 #include <QToolBar>
-#include <QUndoCommand>
-#include <QUndoStack>
 
 #include "tools/cabana/chart/signalselector.h"
+#include "tools/cabana/commands.h"
 #include "tools/cabana/dbc/dbcmanager.h"
 #include "tools/cabana/streams/abstractstream.h"
 
 const int CHART_MIN_WIDTH = 300;
-const QString CHART_MIME_TYPE = "application/x-cabanachartview";
 
 class ChartView;
 class ChartsWidget;
@@ -24,9 +22,6 @@ class ChartsWidget;
 class ChartsContainer : public QWidget {
 public:
   ChartsContainer(ChartsWidget *parent);
-  void dragEnterEvent(QDragEnterEvent *event) override;
-  void dropEvent(QDropEvent *event) override;
-  void dragLeaveEvent(QDragLeaveEvent *event) override { drawDropIndicator({}); }
   void drawDropIndicator(const QPoint &pt) { drop_indictor_pos = pt; update(); }
   void paintEvent(QPaintEvent *ev) override;
   ChartView *getDropAfter(const QPoint &pos) const;
@@ -69,7 +64,12 @@ private:
   void eventsMerged(const MessageEventsMap &new_events);
   void updateState();
   void zoomReset();
-  void startAutoScroll();
+  void startChartDrag(ChartView *chart, const QPoint &global_pos);
+  void dragChartMove(const QPoint &global_pos);
+  void dragChartRelease(const QPoint &global_pos);
+  void cancelChartDrag();
+  bool chartDragActive() const { return drag.source != nullptr; }
+  void startAutoScroll(const QPoint &global_pos);
   void stopAutoScroll();
   void doAutoScroll();
   void updateToolBar();
@@ -81,7 +81,7 @@ private:
   bool eventFilter(QObject *obj, QEvent *event) override;
   void newTab();
   void removeTab(int index);
-  inline QList<ChartView *> &currentCharts() { return tab_charts[tabbar->tabData(tabbar->currentIndex()).toInt()]; }
+  inline std::vector<ChartView *> &currentCharts() { return tab_charts[tabbar->tabData(tabbar->currentIndex()).toInt()]; }
   ChartView *findChart(const MessageId &id, const cabana::Signal *sig);
 
   QLabel *title_label;
@@ -97,11 +97,11 @@ private:
   QAction *redo_zoom_action;
   QAction *reset_zoom_action;
   ToolButton *reset_zoom_btn;
-  QUndoStack *zoom_undo_stack;
+  UndoStack zoom_undo_stack;
 
   ToolButton *remove_all_btn;
-  QList<ChartView *> charts;
-  std::unordered_map<int, QList<ChartView *>> tab_charts;
+  std::vector<ChartView *> charts;
+  std::unordered_map<int, std::vector<ChartView *>> tab_charts;
   TabBar *tabbar;
   ChartsContainer *charts_container;
   QScrollArea *charts_scroll;
@@ -110,7 +110,15 @@ private:
   QAction *columns_action;
   int column_count = 1;
   int current_column_count = 0;
+  struct ChartDrag {
+    ChartView *source = nullptr;
+    QPoint press_pos;  // global
+    bool active = false;
+  } drag;
+  QLabel *drag_preview;
+  ChartView *drop_target = nullptr;
   int auto_scroll_count = 0;
+  QPoint auto_scroll_pos;
   QTimer *auto_scroll_timer;
   QTimer *align_timer;
   int current_theme = 0;
@@ -119,11 +127,10 @@ private:
   friend class ChartsContainer;
 };
 
-class ZoomCommand : public QUndoCommand {
+class ZoomCommand : public UndoCommand {
 public:
-  ZoomCommand(std::pair<double, double> range) : range(range), QUndoCommand() {
+  ZoomCommand(std::pair<double, double> range) : range(range) {
     prev_range = can->timeRange();
-    setText(QObject::tr("Zoom to %1-%2").arg(range.first, 0, 'f', 2).arg(range.second, 0, 'f', 2));
   }
   void undo() override { can->setTimeRange(prev_range); }
   void redo() override { can->setTimeRange(range); }

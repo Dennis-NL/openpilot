@@ -381,6 +381,9 @@ class CarState(CarStateBase):
 
     ret.cruiseState.available = pt_cp.vl["Motor_51"]["TSK_Status"] in (2, 3, 4, 5)
     ret.cruiseState.enabled = pt_cp.vl["Motor_51"]["TSK_Status"] in (3, 4, 5)
+    # TSK winds its braking down through brake_only after a driver brake. Requesting drive-off in this
+    # state can fault TSK, and stock refuses to engage here as well, so block entry until it clears.
+    ret.carNotReady = pt_cp.vl["Motor_51"]["TSK_Status"] == 5  # brake_only
     acc_values = ext_cp.vl.get("MEB_ACC_01", ext_cp.vl.get("ACC_19", {}))
     ret.cruiseState.nonAdaptive = bool(acc_values.get("ACC_Limiter_Mode", 0)) if self.CP.pcmCruise else bool(pt_cp.vl["Motor_51"]["TSK_Limiter_ausgewaehlt"])
 
@@ -585,6 +588,7 @@ class CarState(CarStateBase):
     ret.cruiseFaultLateralMode = allow_lat_only and cruise_faulted and cruise_main_available
     ret.lateralAvailable = ret.cruiseState.available or ret.cruiseFaultLateralMode
     ret.blockPcmEnable = ret.cruiseFaultLateralMode
+    ret.carNotReady = bool(pt_cp.vl["Bremse_8"]["BR8_Sta_VerzReg"])
 
     # Update ACC setpoint. When the setpoint reads as 255, the driver has not
     # yet established an ACC setpoint, so treat it as zero.

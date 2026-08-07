@@ -47,11 +47,11 @@ const char *special_item_label(std::string_view item_id) {
 }
 
 bool pane_kind_is_special(PaneKind kind) {
-  return kind == PaneKind::Map || kind == PaneKind::Camera;
+  return kind == PaneKind::Map || kind == PaneKind::Thumbnail || kind == PaneKind::Camera;
 }
 
 bool is_default_special_title(std::string_view title) {
-  if (title == "Map") return true;
+  if (title == "Map" || title == "Thumbnail") return true;
   return std::any_of(kCameraViewSpecs.begin(), kCameraViewSpecs.end(), [&](const CameraViewSpec &spec) {
     return title == spec.label;
   });
@@ -162,14 +162,12 @@ void open_external_url(std::string_view url) {
   }
 }
 
-std::string route_useradmin_url(const RouteIdentifier &route_id) {
-  return route_id.empty() ? std::string()
-                          : "https://useradmin.comma.ai/?onebox=" + route_id.dongle_id + "%7C" + route_id.log_id;
-}
-
-std::string route_connect_url(const RouteIdentifier &route_id) {
-  return route_id.empty() ? std::string()
-                          : "https://connect.comma.ai/" + route_id.canonical();
+// IQ.Pilot patch: iqpilot routes live on konn3kt, not comma connect. konn3kt has no
+// useradmin equivalent, so that link is gone; the share link keeps connect's
+// <dongle_id>/<log_id> path shape (see tools/lib/logreader.py parse_indirect).
+std::string route_konn3kt_url(const RouteIdentifier &route_id) {
+  static const std::string host = util::getenv("KONN3KT_APP_HOST", "https://konn3kt.com");
+  return route_id.empty() ? std::string() : host + "/" + route_id.canonical();
 }
 
 std::string route_google_maps_url(const GpsTrace &trace) {

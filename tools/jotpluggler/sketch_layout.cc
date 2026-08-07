@@ -24,10 +24,11 @@
 
 #include "common/util.h"
 #include "third_party/json11/json11.hpp"
-#include "tools/replay/api.h"
 #include "tools/replay/logreader.h"
 // IQ.Pilot patch: iqpilot's tools/replay has no py_downloader; route file listing is
-// served directly by CommaApi2::httpGet against the IQ.Pilot konn3kt API.
+// served by the konn3kt CommaApi2 helper, which returns the same JSON shape (and the
+// same {"error": ...} envelope) as upstream's PyDownloader.
+#include "tools/replay/api.h"
 
 namespace fs = std::filesystem;
 
@@ -100,6 +101,7 @@ struct LoadedRouteArtifacts {
   std::vector<CanMessageData> can_messages;
   std::vector<LogEntry> logs;
   std::vector<TimelineEntry> timeline;
+  std::vector<ThumbnailFrame> thumbnails;
   std::unordered_map<std::string, EnumInfo> enum_info;
 };
 
@@ -263,7 +265,8 @@ RouteSelection parse_route_selection(std::string route_name) {
     if (separator == "/") {
       size_t pos = range_str.find(':');
       int begin_segment = 0;
-      if (!parse_segment_number(range_str.substr(0, pos), &begin_segment)) {
+      const std::string begin_str = range_str.substr(0, pos);
+      if (!begin_str.empty() && !parse_segment_number(begin_str, &begin_segment)) {
         return {};
       }
       route.begin_segment = begin_segment;
@@ -330,11 +333,7 @@ std::map<int, SegmentLogs> load_segments_from_json(const json11::Json &json) {
 }
 
 std::map<int, SegmentLogs> load_segments_from_server(const RouteSelection &route) {
-  // IQ.Pilot patch: replaces upstream PyDownloader::getRouteFiles with the existing
-  // iqpilot CommaApi2 helper (same JSON shape: /v1/route/<name>/files).
-  const std::string url = CommaApi2::BASE_URL + "/v1/route/" + route.canonical_name + "/files";
-  long response_code = 0;
-  const std::string result = CommaApi2::httpGet(url, &response_code);
+  const std::string result = CommaApi2::getRouteFiles(route.canonical_name);
   if (result.empty()) throw std::runtime_error("Failed to fetch route files for " + route.canonical_name);
 
   std::string parse_error;
@@ -438,7 +437,7 @@ std::array<uint8_t, 3> parse_color(std::string_view color) {
   return out;
 }
 
-uint8_t android_priority_to_level(uint8_t priority) {
+uint8_t operating_system_priority_to_level(uint8_t priority) {
   switch (priority) {
     case 2:
     case 3:
@@ -497,7 +496,7 @@ void append_timeline_entry(std::vector<TimelineEntry> *timeline, double mono_tim
   });
 }
 
-double android_wall_time_seconds(uint64_t timestamp) {
+double operating_system_wall_time_seconds(uint64_t timestamp) {
   if (timestamp == 0) return 0.0;
   if (timestamp > 1000000000000ULL) return static_cast<double>(timestamp) / 1.0e9;
   if (timestamp > 1000000000ULL) return static_cast<double>(timestamp) / 1.0e6;
@@ -615,13 +614,15 @@ void append_log_event(cereal::Event::Which which,
       logs->push_back(std::move(entry));
       break;
     }
+    // IQ.Pilot patch: upstream renamed cereal's androidLog -> operatingSystemLog (#38209);
+    // iqpilot's cereal still carries the original field name. Only the accessor differs.
     case cereal::Event::Which::ANDROID_LOG: {
-      const auto android = event.getAndroidLog();
-      auto entry = make_entry(LogOrigin::Android, android_priority_to_level(android.getPriority()));
-      entry.wall_time = android_wall_time_seconds(android.getTs());
-      entry.source = android.hasTag() ? android.getTag().cStr() : "android";
-      entry.message = android.hasMessage() ? android.getMessage().cStr() : std::string();
-      entry.context = "pid=" + std::to_string(android.getPid()) + ", tid=" + std::to_string(android.getTid());
+      const auto operating_system_log = event.getAndroidLog();
+      auto entry = make_entry(LogOrigin::OperatingSystem, operating_system_priority_to_level(operating_system_log.getPriority()));
+      entry.wall_time = operating_system_wall_time_seconds(operating_system_log.getTs());
+      entry.source = operating_system_log.hasTag() ? operating_system_log.getTag().cStr() : "operating_system";
+      entry.message = operating_system_log.hasMessage() ? operating_system_log.getMessage().cStr() : std::string();
+      entry.context = "pid=" + std::to_string(operating_system_log.getPid()) + ", tid=" + std::to_string(operating_system_log.getTid());
       if (!entry.message.empty()) {
         std::string err;
         if (const auto p = json11::Json::parse(entry.message, err); err.empty() && p.is_object()) {
@@ -629,10 +630,10 @@ void append_log_event(cereal::Event::Which which,
           if (p["SYSLOG_IDENTIFIER"].is_string() && !p["SYSLOG_IDENTIFIER"].string_value().empty())
             entry.source = p["SYSLOG_IDENTIFIER"].string_value();
           if (auto pri = json_int_value(p["PRIORITY"]); pri.has_value())
-            entry.level = android_priority_to_level(*pri);
+            entry.level = operating_system_priority_to_level(*pri);
           if (auto ts = json_u64_value(p["__REALTIME_TIMESTAMP"]); ts.has_value())
-            entry.wall_time = android_wall_time_seconds(*ts);
-          entry.context = format_journal_context(p, android.getPid(), android.getTid());
+            entry.wall_time = operating_system_wall_time_seconds(*ts);
+          entry.context = format_journal_context(p, operating_system_log.getPid(), operating_system_log.getTid());
         }
       }
       logs->push_back(std::move(entry));
@@ -688,6 +689,25 @@ std::vector<LogEntry> extract_segment_logs(const std::vector<Event> &events) {
   }
 
   return logs;
+}
+
+std::vector<ThumbnailFrame> extract_segment_thumbnails(const std::vector<Event> &events, int segment) {
+  std::vector<ThumbnailFrame> thumbnails;
+  for (const Event &event_record : events) {
+    if (event_record.which != cereal::Event::Which::THUMBNAIL) continue;
+    with_parseable_event(event_record.data, [&](const cereal::Event::Reader &event) {
+      const auto thumbnail = event.getThumbnail();
+      const auto jpeg = thumbnail.getThumbnail();
+      if (jpeg.size() == 0) return;
+      const uint64_t timestamp = thumbnail.getTimestampEof();
+      ThumbnailFrame frame;
+      frame.timestamp = static_cast<double>(timestamp != 0 ? timestamp : event.getLogMonoTime()) / 1.0e9;
+      frame.segment = segment;
+      frame.jpeg.assign(jpeg.begin(), jpeg.end());
+      thumbnails.push_back(std::move(frame));
+    });
+  }
+  return thumbnails;
 }
 
 RouteMetadata extract_segment_metadata(const std::vector<Event> &events) {
@@ -802,6 +822,8 @@ Pane parse_dock_area(const json11::Json &dock_area_node) {
   const std::string kind = dock_area_node["kind"].string_value();
   if (kind == "map") {
     pane.kind = PaneKind::Map;
+  } else if (kind == "thumbnail") {
+    pane.kind = PaneKind::Thumbnail;
   } else if (kind == "camera") {
     pane.kind = PaneKind::Camera;
     const std::string camera_view = dock_area_node["camera_view"].string_value();
@@ -910,7 +932,9 @@ void append_scalar_point(RouteSeries *series,
   series->values.push_back(value);
 }
 
-void append_fixed_scalar_point(RouteSeries *series, double tm, double value) {
+// This has thousands of generated call sites. Inlining it duplicates vector
+// growth logic throughout the extractor and is slower both to compile and run.
+__attribute__((noinline)) void append_fixed_scalar_point(RouteSeries *series, double tm, double value) {
   series->times.push_back(tm);
   series->values.push_back(value);
 }
@@ -1173,6 +1197,7 @@ RouteData build_route_data(std::vector<RouteSeries> &&series_list,
                            std::vector<CanMessageData> &&can_messages,
                            std::vector<LogEntry> &&logs,
                            std::vector<TimelineEntry> &&timeline,
+                           std::vector<ThumbnailFrame> &&thumbnails,
                            std::unordered_map<std::string, EnumInfo> &&enum_info,
                            std::string car_fingerprint,
                            std::string dbc_name) {
@@ -1239,6 +1264,14 @@ RouteData build_route_data(std::vector<RouteSeries> &&series_list,
     route_data.x_min = timeline.front().start_time;
     route_data.x_max = timeline.back().end_time;
   }
+  std::sort(thumbnails.begin(), thumbnails.end(), [](const ThumbnailFrame &a, const ThumbnailFrame &b) {
+    return a.timestamp < b.timestamp;
+  });
+  if (!route_data.has_time_range && !thumbnails.empty()) {
+    route_data.has_time_range = true;
+    route_data.x_min = thumbnails.front().timestamp;
+    route_data.x_max = thumbnails.back().timestamp;
+  }
 
   if (route_data.has_time_range) {
     const double time_offset = route_data.x_min;
@@ -1260,6 +1293,9 @@ RouteData build_route_data(std::vector<RouteSeries> &&series_list,
       entry.start_time -= time_offset;
       entry.end_time -= time_offset;
     }
+    for (ThumbnailFrame &thumbnail : thumbnails) {
+      thumbnail.timestamp -= time_offset;
+    }
     route_data.x_max -= time_offset;
     route_data.x_min = 0.0;
   }
@@ -1277,6 +1313,7 @@ RouteData build_route_data(std::vector<RouteSeries> &&series_list,
     merged_timeline.push_back(std::move(entry));
   }
   route_data.timeline = std::move(merged_timeline);
+  route_data.thumbnails = std::move(thumbnails);
   std::sort(can_messages.begin(), can_messages.end(), [](const CanMessageData &a, const CanMessageData &b) {
     return std::make_tuple(a.id.service, a.id.bus, a.id.address)
          < std::make_tuple(b.id.service, b.id.bus, b.id.address);
@@ -1530,6 +1567,7 @@ LoadedRouteArtifacts load_route_series_parallel(
     SeriesAccumulator series;
     std::vector<LogEntry> logs;
     std::vector<TimelineEntry> timeline;
+    std::vector<ThumbnailFrame> thumbnails;
   };
 
   const std::vector<std::pair<int, SegmentLogs>> segment_list(segments.begin(), segments.end());
@@ -1579,15 +1617,12 @@ LoadedRouteArtifacts load_route_series_parallel(
         continue;
       }
 
-      // IQ.Pilot patch: iqpilot's LogReader does not expose load-time telemetry
-      // (download/decompress/parse seconds, compressed/decompressed sizes). Stub
-      // these to 0 so the loader UI still renders without per-segment diagnostics.
-      segment_stats.download_seconds = 0.0;
-      segment_stats.decompress_seconds = 0.0;
-      segment_stats.parse_seconds = 0.0;
-      segment_stats.compressed_bytes = 0;
-      segment_stats.decompressed_bytes = 0;
-      stats->bytes_downloaded.fetch_add(0);
+      segment_stats.download_seconds = reader.download_seconds();
+      segment_stats.decompress_seconds = reader.decompress_seconds();
+      segment_stats.parse_seconds = reader.parse_seconds();
+      segment_stats.compressed_bytes = reader.compressed_size();
+      segment_stats.decompressed_bytes = reader.decompressed_size();
+      stats->bytes_downloaded.fetch_add(reader.compressed_size());
       stats->segments_downloaded.fetch_add(1);
       stats->publish(RouteLoadStage::DownloadingSegment, index, std::to_string(segment_number));
 
@@ -1595,6 +1630,7 @@ LoadedRouteArtifacts load_route_series_parallel(
       results[index].series = extract_segment_series(reader.events, schema, can_dbc, skip_raw_can, worker_budget, segment_workers);
       results[index].logs = extract_segment_logs(reader.events);
       results[index].timeline = extract_segment_timeline(reader.events);
+      results[index].thumbnails = extract_segment_thumbnails(reader.events, segment_number);
       segment_stats.extract_seconds = std::chrono::duration<double>(LoadStats::Clock::now() - extract_start).count();
       segment_stats.event_count = reader.events.size();
       segment_stats.series_count = populated_series_count(results[index].series);
@@ -1621,6 +1657,7 @@ LoadedRouteArtifacts load_route_series_parallel(
   }
   std::vector<LogEntry> logs;
   std::vector<TimelineEntry> timeline;
+  std::vector<ThumbnailFrame> thumbnails;
   for (SegmentResult &result : results) {
     if (!result.logs.empty()) {
       logs.insert(logs.end(),
@@ -1632,12 +1669,18 @@ LoadedRouteArtifacts load_route_series_parallel(
                       std::make_move_iterator(result.timeline.begin()),
                       std::make_move_iterator(result.timeline.end()));
     }
+    if (!result.thumbnails.empty()) {
+      thumbnails.insert(thumbnails.end(),
+                        std::make_move_iterator(result.thumbnails.begin()),
+                        std::make_move_iterator(result.thumbnails.end()));
+    }
   }
   LoadedRouteArtifacts artifacts;
   artifacts.series = collect_series(std::move(merged));
   artifacts.can_messages = std::move(merged.can_messages);
   artifacts.logs = std::move(logs);
   artifacts.timeline = std::move(timeline);
+  artifacts.thumbnails = std::move(thumbnails);
   artifacts.enum_info = std::move(merged.enum_info);
   stats->merge_end = LoadStats::Clock::now();
   return artifacts;
@@ -1843,6 +1886,7 @@ RouteData load_route_data(const std::string &route_name,
                                           std::move(artifacts.can_messages),
                                           std::move(artifacts.logs),
                                           std::move(artifacts.timeline),
+                                          std::move(artifacts.thumbnails),
                                           std::move(artifacts.enum_info),
                                           metadata.car_fingerprint,
                                           resolved_dbc);

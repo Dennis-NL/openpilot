@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import NamedTuple
 from importlib.resources import as_file, files
 from openpilot.common.swaglog import cloudlog
-from openpilot.system.hardware import HARDWARE, PC
+from openpilot.system.hardware import EGL_DMA_BUF_SUPPORTED, HARDWARE, PC
 from openpilot.system.ui.lib.multilang import multilang
 from openpilot.common.realtime import Ratekeeper
 
@@ -326,7 +326,7 @@ class GuiApplication(IQAppHooks):
           rl.glfw_swap_interval(0)
         except Exception:
           pass
-      if not PC and rl.is_window_ready() and not OFFSCREEN:
+      if EGL_DMA_BUF_SUPPORTED and rl.is_window_ready() and not OFFSCREEN:
         try:
           from openpilot.system.ui.lib.egl import set_swap_interval
           set_swap_interval(0)
@@ -349,7 +349,7 @@ class GuiApplication(IQAppHooks):
         glfw_vsync = False
 
     egl_vsync = False
-    if not PC:
+    if EGL_DMA_BUF_SUPPORTED:
       try:
         from openpilot.system.ui.lib.egl import set_swap_interval
         egl_vsync = set_swap_interval(interval)
@@ -367,7 +367,7 @@ class GuiApplication(IQAppHooks):
       rl.rl_draw_render_batch_active()
 
   def _apply_display_sync_before_swap(self) -> None:
-    if PC or OFFSCREEN or not DISPLAY_SYNC_BEFORE_SWAP or self._display_sync_available is False:
+    if not EGL_DMA_BUF_SUPPORTED or OFFSCREEN or not DISPLAY_SYNC_BEFORE_SWAP or self._display_sync_available is False:
       return
     try:
       self._flush_raylib_batch()
@@ -395,7 +395,7 @@ class GuiApplication(IQAppHooks):
     # intermittent screen tearing when scrolling (the content moves, so a mid-scanout swap is
     # visible). eglSwapInterval is a trivial call, so re-assert it every frame to keep FIFO vsync
     # pinned instead of relying on the slow (VSYNC_REAPPLY_INTERVAL) full re-apply below.
-    if self._paced_by_vsync and self._vsync_interval > 0 and not PC and rl.is_window_ready():
+    if self._paced_by_vsync and self._vsync_interval > 0 and EGL_DMA_BUF_SUPPORTED and rl.is_window_ready():
       try:
         from openpilot.system.ui.lib.egl import set_swap_interval
         set_swap_interval(self._vsync_interval)
@@ -850,7 +850,7 @@ class GuiApplication(IQAppHooks):
         # full-res frame texture can make the Adreno/GBM driver silently reset the swap interval to 0
         # *after* that call but before this swap, which reintroduced tearing. This is the swap that
         # actually matters, so pin the interval here too.
-        if (ENABLE_VSYNC and not OFFSCREEN and not PC and self._paced_by_vsync
+        if (ENABLE_VSYNC and not OFFSCREEN and EGL_DMA_BUF_SUPPORTED and self._paced_by_vsync
             and self._vsync_interval > 0 and rl.is_window_ready()):
           try:
             from openpilot.system.ui.lib.egl import set_swap_interval

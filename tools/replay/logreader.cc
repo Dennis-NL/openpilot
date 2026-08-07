@@ -1,19 +1,31 @@
 #include "tools/replay/logreader.h"
 
 #include <algorithm>
+#include <chrono>
 #include <utility>
 #include "tools/replay/filereader.h"
 #include "tools/replay/util.h"
 #include "common/util.h"
 
 bool LogReader::load(const std::string &url, std::atomic<bool> *abort, bool local_cache, int chunk_size, int retries) {
+  using Clock = std::chrono::steady_clock;
+  compressed_size_ = decompressed_size_ = 0;
+  download_seconds_ = decompress_seconds_ = parse_seconds_ = 0.0;
+
+  const auto download_start = Clock::now();
   std::string data = FileReader(local_cache, chunk_size, retries).read(url, abort);
+  download_seconds_ = std::chrono::duration<double>(Clock::now() - download_start).count();
+  compressed_size_ = decompressed_size_ = data.size();
+
   if (!data.empty()) {
+    const auto decompress_start = Clock::now();
     if (url.find(".bz2") != std::string::npos || util::starts_with(data, "BZh9")) {
       data = decompressBZ2(data, abort);
     } else if (url.find(".zst") != std::string::npos || util::starts_with(data, "\x28\xB5\x2F\xFD")) {
       data = decompressZST(data, abort);
     }
+    decompress_seconds_ = std::chrono::duration<double>(Clock::now() - decompress_start).count();
+    decompressed_size_ = data.size();
   }
 
   bool success = !data.empty() && load(data.data(), data.size(), abort);
@@ -23,6 +35,8 @@ bool LogReader::load(const std::string &url, std::atomic<bool> *abort, bool loca
 }
 
 bool LogReader::load(const char *data, size_t size, std::atomic<bool> *abort) {
+  using Clock = std::chrono::steady_clock;
+  const auto parse_start = Clock::now();
   try {
     events.reserve(65000);
     kj::ArrayPtr<const capnp::word> words((const capnp::word *)data, size / sizeof(capnp::word));
@@ -64,6 +78,8 @@ bool LogReader::load(const char *data, size_t size, std::atomic<bool> *abort) {
   if (requires_migration) {
     migrateOldEvents();
   }
+
+  parse_seconds_ = std::chrono::duration<double>(Clock::now() - parse_start).count();
 
   if (!events.empty() && !(abort && *abort)) {
     events.shrink_to_fit();

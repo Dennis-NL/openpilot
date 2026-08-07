@@ -26,16 +26,14 @@ static libusb_context *init_usb_ctx() {
   return context;
 }
 
-Panda::Panda(std::string serial, uint32_t bus_offset, bool passive_mode) : bus_offset(bus_offset), passive_mode(passive_mode) {
+Panda::Panda(std::string serial, uint32_t bus_offset) : bus_offset(bus_offset) {
   if (!init_usb_connection(serial)) {
     throw std::runtime_error("Error connecting to panda");
   }
 
   LOGW("connected to %s over USB", serial.c_str());
   hw_type = get_hw_type();
-  if (!passive_mode) {
-    can_reset_communications();
-  }
+  can_reset_communications();
 }
 
 Panda::~Panda() {

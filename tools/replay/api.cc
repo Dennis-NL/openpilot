@@ -160,4 +160,54 @@ std::string httpGet(const std::string &url, long *response_code) {
   return res == CURLE_OK ? readBuffer : std::string{};
 }
 
+std::string apiResponse(const std::string &body, long response_code) {
+  if (response_code == 401 || response_code == 403) {
+    return R"({"error": "unauthorized"})";
+  }
+  if (response_code == 404) {
+    return R"({"error": "not_found"})";
+  }
+  if (body.empty() || response_code < 200 || response_code >= 300) {
+    return R"({"error": "network"})";
+  }
+  return body;
+}
+
+std::string routeFilesPath(const std::string &route) {
+  return "v1/route/" + route + "/files";
+}
+
+std::string devicesPath() {
+  return "v1/me/devices/";
+}
+
+std::string deviceRoutesPath(const std::string &dongle_id, int64_t start_ms, int64_t end_ms, bool preserved) {
+  if (preserved) {
+    return "v1/devices/" + dongle_id + "/routes/preserved";
+  }
+
+  std::string query;
+  if (start_ms > 0) query += "start=" + std::to_string(start_ms);
+  if (end_ms > 0) query += (query.empty() ? "" : "&") + ("end=" + std::to_string(end_ms));
+  return "v1/devices/" + dongle_id + "/routes_segments" + (query.empty() ? "" : "?" + query);
+}
+
+static std::string apiCall(const std::string &path) {
+  long response_code = 0;
+  const std::string body = httpGet(BASE_URL + "/" + path, &response_code);
+  return apiResponse(body, response_code);
+}
+
+std::string getRouteFiles(const std::string &route) {
+  return apiCall(routeFilesPath(route));
+}
+
+std::string getDevices() {
+  return apiCall(devicesPath());
+}
+
+std::string getDeviceRoutes(const std::string &dongle_id, int64_t start_ms, int64_t end_ms, bool preserved) {
+  return apiCall(deviceRoutesPath(dongle_id, start_ms, end_ms, preserved));
+}
+
 }  // namespace CommaApi

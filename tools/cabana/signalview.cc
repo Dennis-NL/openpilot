@@ -1,8 +1,9 @@
 #include "tools/cabana/signalview.h"
+#include "tools/cabana/dbc/dbcqt.h"
 
 #include <algorithm>
+#include <future>
 
-#include <QCompleter>
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -11,10 +12,10 @@
 #include <QPainterPath>
 #include <QPushButton>
 #include <QScrollBar>
-#include <QtConcurrent>
 #include <QVBoxLayout>
 
 #include "tools/cabana/commands.h"
+#include "tools/cabana/utils/util.h"
 
 // SignalModel
 
@@ -25,21 +26,21 @@ static QString signalTypeToString(cabana::Signal::Type type) {
 }
 
 SignalModel::SignalModel(QObject *parent) : root(new Item), QAbstractItemModel(parent) {
-  QObject::connect(dbc(), &DBCManager::DBCFileChanged, this, &SignalModel::refresh);
-  QObject::connect(dbc(), &DBCManager::msgUpdated, this, &SignalModel::handleMsgChanged);
-  QObject::connect(dbc(), &DBCManager::msgRemoved, this, &SignalModel::handleMsgChanged);
-  QObject::connect(dbc(), &DBCManager::signalAdded, this, &SignalModel::handleSignalAdded);
-  QObject::connect(dbc(), &DBCManager::signalUpdated, this, &SignalModel::handleSignalUpdated);
-  QObject::connect(dbc(), &DBCManager::signalRemoved, this, &SignalModel::handleSignalRemoved);
+  QObject::connect(dbcNotifier(), &QtDBCNotifier::DBCFileChanged, this, &SignalModel::refresh);
+  QObject::connect(dbcNotifier(), &QtDBCNotifier::msgUpdated, this, &SignalModel::handleMsgChanged);
+  QObject::connect(dbcNotifier(), &QtDBCNotifier::msgRemoved, this, &SignalModel::handleMsgChanged);
+  QObject::connect(dbcNotifier(), &QtDBCNotifier::signalAdded, this, &SignalModel::handleSignalAdded);
+  QObject::connect(dbcNotifier(), &QtDBCNotifier::signalUpdated, this, &SignalModel::handleSignalUpdated);
+  QObject::connect(dbcNotifier(), &QtDBCNotifier::signalRemoved, this, &SignalModel::handleSignalRemoved);
 }
 
 void SignalModel::insertItem(SignalModel::Item *root_item, int pos, const cabana::Signal *sig) {
-  Item *parent_item = new Item{.sig = sig, .parent = root_item, .title = sig->name, .type = Item::Sig};
-  root_item->children.insert(pos, parent_item);
+  Item *parent_item = new Item{.type = Item::Sig, .parent = root_item, .sig = sig, .title = QString::fromStdString(sig->name)};
+  root_item->children.insert(root_item->children.begin() + pos, parent_item);
   QString titles[]{"Name", "Size", "Receiver Nodes", "Little Endian", "Signed", "Offset", "Factor", "Type",
                    "Multiplex Value", "Extra Info", "Unit", "Comment", "Minimum Value", "Maximum Value", "Value Table"};
   for (int i = 0; i < std::size(titles); ++i) {
-    auto item = new Item{.sig = sig, .parent = parent_item, .title = titles[i], .type = (Item::Type)(i + Item::Name)};
+    auto item = new Item{.type = (Item::Type)(i + Item::Name), .parent = parent_item, .sig = sig, .title = titles[i]};
     parent_item->children.push_back(item);
     if (item->type == Item::ExtraInfo) {
       parent_item = item;
@@ -63,7 +64,7 @@ void SignalModel::refresh() {
   root.reset(new SignalModel::Item);
   if (auto msg = dbc()->msg(msg_id)) {
     for (auto s : msg->getSignals()) {
-      if (filter_str.isEmpty() || s->name.contains(filter_str, Qt::CaseInsensitive)) {
+      if (filter_str.isEmpty() || QString::fromStdString(s->name).contains(filter_str, Qt::CaseInsensitive)) {
         insertItem(root.get(), root->children.size(), s);
       }
     }
@@ -124,25 +125,25 @@ QVariant SignalModel::data(const QModelIndex &index, int role) const {
     const Item *item = getItem(index);
     if (role == Qt::DisplayRole || role == Qt::EditRole) {
       if (index.column() == 0) {
-        return item->type == Item::Sig ? item->sig->name : item->title;
+        return item->type == Item::Sig ? QString::fromStdString(item->sig->name) : item->title;
       } else {
         switch (item->type) {
           case Item::Sig: return item->sig_val;
-          case Item::Name: return item->sig->name;
+          case Item::Name: return QString::fromStdString(item->sig->name);
           case Item::Size: return item->sig->size;
-          case Item::Node: return item->sig->receiver_name;
+          case Item::Node: return QString::fromStdString(item->sig->receiver_name);
           case Item::SignalType: return signalTypeToString(item->sig->type);
           case Item::MultiplexValue: return item->sig->multiplex_value;
-          case Item::Offset: return doubleToString(item->sig->offset);
-          case Item::Factor: return doubleToString(item->sig->factor);
-          case Item::Unit: return item->sig->unit;
-          case Item::Comment: return item->sig->comment;
-          case Item::Min: return doubleToString(item->sig->min);
-          case Item::Max: return doubleToString(item->sig->max);
+          case Item::Offset: return QString::fromStdString(doubleToString(item->sig->offset));
+          case Item::Factor: return QString::fromStdString(doubleToString(item->sig->factor));
+          case Item::Unit: return QString::fromStdString(item->sig->unit);
+          case Item::Comment: return QString::fromStdString(item->sig->comment);
+          case Item::Min: return QString::fromStdString(doubleToString(item->sig->min));
+          case Item::Max: return QString::fromStdString(doubleToString(item->sig->max));
           case Item::Desc: {
             QStringList val_desc;
             for (auto &[val, desc] : item->sig->val_desc) {
-              val_desc << QString("%1 \"%2\"").arg(val).arg(desc);
+              val_desc << QString("%1 \"%2\"").arg(val).arg(QString::fromStdString(desc));
             }
             return val_desc.join(" ");
           }
@@ -165,17 +166,17 @@ bool SignalModel::setData(const QModelIndex &index, const QVariant &value, int r
   Item *item = getItem(index);
   cabana::Signal s = *item->sig;
   switch (item->type) {
-    case Item::Name: s.name = value.toString(); break;
+    case Item::Name: s.name = value.toString().toStdString(); break;
     case Item::Size: s.size = value.toInt(); break;
-    case Item::Node: s.receiver_name = value.toString().trimmed(); break;
+    case Item::Node: s.receiver_name = value.toString().trimmed().toStdString(); break;
     case Item::SignalType: s.type = (cabana::Signal::Type)value.toInt(); break;
     case Item::MultiplexValue: s.multiplex_value = value.toInt(); break;
     case Item::Endian: s.is_little_endian = value.toBool(); break;
     case Item::Signed: s.is_signed = value.toBool(); break;
     case Item::Offset: s.offset = value.toDouble(); break;
     case Item::Factor: s.factor = value.toDouble(); break;
-    case Item::Unit: s.unit = value.toString(); break;
-    case Item::Comment: s.comment = value.toString(); break;
+    case Item::Unit: s.unit = value.toString().toStdString(); break;
+    case Item::Comment: s.comment = value.toString().toStdString(); break;
     case Item::Min: s.min = value.toDouble(); break;
     case Item::Max: s.max = value.toDouble(); break;
     case Item::Desc: s.val_desc = value.value<ValueDescription>(); break;
@@ -189,7 +190,7 @@ bool SignalModel::setData(const QModelIndex &index, const QVariant &value, int r
 bool SignalModel::saveSignal(const cabana::Signal *origin_s, cabana::Signal &s) {
   auto msg = dbc()->msg(msg_id);
   if (s.name != origin_s->name && msg->sig(s.name) != nullptr) {
-    QString text = tr("There is already a signal with the same name '%1'").arg(s.name);
+    QString text = tr("There is already a signal with the same name '%1'").arg(QString::fromStdString(s.name));
     QMessageBox::warning(nullptr, tr("Failed to save signal"), text);
     return false;
   }
@@ -197,7 +198,7 @@ bool SignalModel::saveSignal(const cabana::Signal *origin_s, cabana::Signal &s) 
   if (s.is_little_endian != origin_s->is_little_endian) {
     s.start_bit = flipBitPos(s.start_bit);
   }
-  UndoStack::push(new EditSignalCommand(msg_id, origin_s, s));
+  UndoStack::instance()->push(new EditSignalCommand(msg_id, origin_s, s));
   return true;
 }
 
@@ -214,7 +215,7 @@ void SignalModel::handleSignalAdded(MessageId id, const cabana::Signal *sig) {
       beginInsertRows({}, i, i);
       insertItem(root.get(), i, sig);
       endInsertRows();
-    } else if (sig->name.contains(filter_str, Qt::CaseInsensitive)) {
+    } else if (QString::fromStdString(sig->name).contains(filter_str, Qt::CaseInsensitive)) {
       refresh();
     }
   }
@@ -229,7 +230,9 @@ void SignalModel::handleSignalUpdated(const cabana::Signal *sig) {
       int to = dbc()->msg(msg_id)->indexOf(sig);
       if (to != row) {
         beginMoveRows({}, row, row, {}, to > row ? to + 1 : to);
-        root->children.move(row, to);
+        auto item = root->children[row];
+        root->children.erase(root->children.begin() + row);
+        root->children.insert(root->children.begin() + to, item);
         endMoveRows();
       }
     }
@@ -239,7 +242,8 @@ void SignalModel::handleSignalUpdated(const cabana::Signal *sig) {
 void SignalModel::handleSignalRemoved(const cabana::Signal *sig) {
   if (int row = signalRow(sig); row != -1) {
     beginRemoveRows({}, row, row);
-    delete root->children.takeAt(row);
+    delete root->children[row];
+    root->children.erase(root->children.begin() + row);
     endRemoveRows();
   }
 }
@@ -248,7 +252,7 @@ void SignalModel::handleSignalRemoved(const cabana::Signal *sig) {
 
 SignalItemDelegate::SignalItemDelegate(QObject *parent) : QStyledItemDelegate(parent) {
   name_validator = new NameValidator(this);
-  node_validator = new QRegExpValidator(QRegExp("^\\w+(,\\w+)*$"), this);
+  node_validator = new NodeValidator(this);
   double_validator = new DoubleValidator(this);
 
   label_font.setPointSize(8);
@@ -301,7 +305,7 @@ void SignalItemDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
       path.addRoundedRect(icon_rect, 3, 3);
       painter->setPen(item->highlight ? Qt::white : Qt::black);
       painter->setFont(label_font);
-      painter->fillPath(path, item->sig->color.darker(item->highlight ? 125 : 0));
+      painter->fillPath(path, toQColor(item->sig->color.darker(item->highlight ? 125 : 0)));
       painter->drawText(icon_rect, Qt::AlignCenter, QString::number(item->row() + 1));
 
       rect.setLeft(icon_rect.right() + h_margin * 2);
@@ -372,12 +376,6 @@ QWidget *SignalItemDelegate::createEditor(QWidget *parent, const QStyleOptionVie
     else if (item->type == SignalModel::Item::Node) e->setValidator(node_validator);
     else e->setValidator(double_validator);
 
-    if (item->type == SignalModel::Item::Name) {
-      QCompleter *completer = new QCompleter(dbc()->signalNames(), e);
-      completer->setCaseSensitivity(Qt::CaseInsensitive);
-      completer->setFilterMode(Qt::MatchContains);
-      e->setCompleter(completer);
-    }
     return e;
   } else if (item->type == SignalModel::Item::Size) {
     QSpinBox *spin = new QSpinBox(parent);
@@ -395,7 +393,7 @@ QWidget *SignalItemDelegate::createEditor(QWidget *parent, const QStyleOptionVie
     return c;
   } else if (item->type == SignalModel::Item::Desc) {
     ValueDescriptionDlg dlg(item->sig->val_desc, parent);
-    dlg.setWindowTitle(item->sig->name);
+    dlg.setWindowTitle(QString::fromStdString(item->sig->name));
     if (dlg.exec()) {
       ((QAbstractItemModel *)index.model())->setData(index, QVariant::fromValue(dlg.val_desc));
     }
@@ -422,8 +420,7 @@ SignalView::SignalView(ChartsWidget *charts, QWidget *parent) : charts(charts), 
   QHBoxLayout *hl = new QHBoxLayout(title_bar);
   hl->addWidget(signal_count_lb = new QLabel());
   filter_edit = new QLineEdit(this);
-  QRegularExpression re("\\S+");
-  filter_edit->setValidator(new QRegularExpressionValidator(re, this));
+  filter_edit->setValidator(new NonWhitespaceValidator(this));
   filter_edit->setClearButtonEnabled(true);
   filter_edit->setPlaceholderText(tr("Filter Signal"));
   hl->addWidget(filter_edit);
@@ -475,8 +472,8 @@ SignalView::SignalView(ChartsWidget *charts, QWidget *parent) : charts(charts), 
   QObject::connect(tree, &QTreeView::entered, [this](const QModelIndex &index) { emit highlight(model->getItem(index)->sig); });
   QObject::connect(model, &QAbstractItemModel::modelReset, this, &SignalView::rowsChanged);
   QObject::connect(model, &QAbstractItemModel::rowsRemoved, this, &SignalView::rowsChanged);
-  QObject::connect(dbc(), &DBCManager::signalAdded, this, &SignalView::handleSignalAdded);
-  QObject::connect(dbc(), &DBCManager::signalUpdated, this, &SignalView::handleSignalUpdated);
+  QObject::connect(dbcNotifier(), &QtDBCNotifier::signalAdded, this, &SignalView::handleSignalAdded);
+  QObject::connect(dbcNotifier(), &QtDBCNotifier::signalUpdated, this, &SignalView::handleSignalUpdated);
   QObject::connect(tree->verticalScrollBar(), &QScrollBar::valueChanged, [this]() { updateState(); });
   QObject::connect(tree->verticalScrollBar(), &QScrollBar::rangeChanged, [this]() { updateState(); });
   QObject::connect(can, &AbstractStream::msgsReceived, this, &SignalView::updateState);
@@ -489,7 +486,7 @@ SignalView::SignalView(ChartsWidget *charts, QWidget *parent) : charts(charts), 
 
   setWhatsThis(tr(R"(
     <b>Signal view</b><br />
-    <!-- TODO: add descprition here -->
+    <!-- TODO: add description here -->
   )"));
 }
 
@@ -518,7 +515,7 @@ void SignalView::rowsChanged() {
 
       tree->setIndexWidget(index, w);
       auto sig = model->getItem(index)->sig;
-      QObject::connect(remove_btn, &QToolButton::clicked, [=]() { UndoStack::push(new RemoveSigCommand(model->msg_id, sig)); });
+      QObject::connect(remove_btn, &QToolButton::clicked, [=]() { UndoStack::instance()->push(new RemoveSigCommand(model->msg_id, sig)); });
       QObject::connect(plot_btn, &QToolButton::clicked, [=](bool checked) {
         emit showChart(model->msg_id, sig, checked, QGuiApplication::keyboardModifiers() & Qt::ShiftModifier);
       });
@@ -621,7 +618,7 @@ void SignalView::updateState(const std::set<MessageId> *msgs) {
   for (auto item : model->root->children) {
     double value = 0;
     if (item->sig->getValue(last_msg.dat.data(), last_msg.dat.size(), &value)) {
-      item->sig_val = item->sig->formatValue(value);
+      item->sig_val = QString::fromStdString(item->sig->formatValue(value));
       max_value_width = std::max(max_value_width, fontMetrics().horizontalAdvance(item->sig_val));
     }
   }
@@ -635,13 +632,13 @@ void SignalView::updateState(const std::set<MessageId> *msgs) {
                delegate->button_size.height() - style()->pixelMetric(QStyle::PM_FocusFrameVMargin) * 2);
 
     auto [first, last] = can->eventsInRange(model->msg_id, std::make_pair(last_msg.ts -settings.sparkline_range, last_msg.ts));
-    QFutureSynchronizer<void> synchronizer;
+    std::vector<std::future<void>> futures;
     for (int i = first_visible.row(); i <= last_visible.row(); ++i) {
       auto item = model->getItem(model->index(i, 1));
-      synchronizer.addFuture(QtConcurrent::run(
-          &item->sparkline, &Sparkline::update, item->sig, first, last, settings.sparkline_range, size));
+      futures.push_back(std::async(std::launch::async,
+          &Sparkline::update, &item->sparkline, item->sig, first, last, settings.sparkline_range, size));
     }
-    synchronizer.waitForFinished();
+    for (auto &f : futures) f.get();
   }
 
   for (int i = 0; i < model->rowCount(); ++i) {
@@ -677,7 +674,7 @@ ValueDescriptionDlg::ValueDescriptionDlg(const ValueDescription &descriptions, Q
   int row = 0;
   for (auto &[val, desc] : descriptions) {
     table->setItem(row, 0, new QTableWidgetItem(QString::number(val)));
-    table->setItem(row, 1, new QTableWidgetItem(desc));
+    table->setItem(row, 1, new QTableWidgetItem(QString::fromStdString(desc)));
     ++row;
   }
 
@@ -706,7 +703,7 @@ void ValueDescriptionDlg::save() {
     QString val = table->item(i, 0)->text().trimmed();
     QString desc = table->item(i, 1)->text().trimmed();
     if (!val.isEmpty() && !desc.isEmpty()) {
-      val_desc.push_back({val.toDouble(), desc});
+      val_desc.push_back({val.toDouble(), desc.toStdString()});
     }
   }
   QDialog::accept();

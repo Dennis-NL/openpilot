@@ -29,6 +29,8 @@ class CarState(CarStateBase, IQCarState):
 
     self.hands_on_level = 0
     self.acc_state_last = 0
+    self.das_accCancel = False
+    self.das_cancel_last = True
     self.das_control = None
     self.das_body_controls_dat = b""
     self._odometer_store = vehicle_state.VehicleOdometerStore(CP, Params())
@@ -93,14 +95,23 @@ class CarState(CarStateBase, IQCarState):
     cruise_state = self.can_define.dv["DI_state"]["DI_cruiseState"].get(int(cp_party.vl["DI_state"]["DI_cruiseState"]), None)
     speed_units = self.can_define.dv["DI_state"]["DI_speedUnits"].get(int(cp_party.vl["DI_state"]["DI_speedUnits"]), None)
     acc_state = cp_ap_party.vl["DAS_control"]["DAS_accState"]
-    # Respect all stock DAS cancel states, not just ACC_CANCEL_GENERIC_SILENT(13).
-    # ELDA/ELK triggers ACC_CANCEL_GENERIC(0) which must also be forwarded.
-    self.das_accCancel = acc_state in (0, 1, 2, 12, 13, 14, 15)
 
     summon_state = self.can_define.dv["DI_state"]["DI_autoparkState"].get(int(cp_party.vl["DI_state"]["DI_autoparkState"]), None)
     cruise_enabled = cruise_state in ("ENABLED", "STANDSTILL", "OVERRIDE", "PRE_FAULT", "PRE_CANCEL")
     self.cruise_override = cruise_state in ("OVERRIDE")
     self.update_summon_state(summon_state, cruise_enabled)
+
+    # Respect all stock DAS cancel states, not just ACC_CANCEL_GENERIC_SILENT(13).
+    # ELDA/ELK triggers ACC_CANCEL_GENERIC(0) which must also be forwarded.
+    # The stock AP is isolated from the party bus while the relay is closed, so its accState
+    # free-runs between ACC_ON and ACC_CANCEL_GENERIC. Only a rising edge while ACC is engaged
+    # is a real cancel; level-forwarding it pins DI_cruiseState to UNAVAILABLE and blocks engaging.
+    das_cancel = acc_state in (0, 1, 2, 12, 13, 14, 15)
+    if not cruise_enabled:
+      self.das_accCancel = False
+    elif das_cancel and not self.das_cancel_last:
+      self.das_accCancel = True
+    self.das_cancel_last = das_cancel
 
     # Match panda safety cruise engaged logic
     ret.cruiseState.enabled = cruise_enabled and not self.summon

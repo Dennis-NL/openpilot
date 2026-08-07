@@ -177,6 +177,15 @@ struct InitData {
 
   wallTimeNanos @20 :UInt64;
 
+  ufsHealth @25 :UfsHealth;
+
+  struct UfsHealth {
+    preEolInfo @0 :UInt8;
+    lifeTimeEstimateA @1 :UInt8;
+    lifeTimeEstimateB @2 :UInt8;
+    vendorHealthReport @3 :Data;
+  }
+
   enum DeviceType {
     unknown @0;
     neo @1;
@@ -2670,7 +2679,7 @@ struct Event {
     iqPerfTrace @136 :Custom.IQPerfTrace;
     iqConstructionZone @137 :Custom.IQConstructionZone;
     iqVehicleTracks @138 :Custom.IQVehicleTracks;
-    customReserved13 @139 :Custom.CustomReserved13;
+    iqEnvironment @139 :Custom.IQEnvironment;
     customReserved14 @140 :Custom.CustomReserved14;
     customReserved15 @141 :Custom.CustomReserved15;
     customReserved16 @142 :Custom.CustomReserved16;

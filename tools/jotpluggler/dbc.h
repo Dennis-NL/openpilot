@@ -276,6 +276,7 @@ inline void Database::parseSg(const std::string &line, int line_number, Message 
       signal.type = Signal::Type::Multiplexor;
     } else if (!indicator.empty() && indicator.front() == 'm') {
       signal.type = Signal::Type::Multiplexed;
+      // IQ.Pilot patch: guard a bare "m" indicator; std::stoi("") throws.
       const std::string mux = indicator.substr(1);
       signal.multiplex_value = mux.empty() ? 0 : std::stoi(mux);
     } else {

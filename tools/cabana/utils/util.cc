@@ -1,24 +1,26 @@
 #include "tools/cabana/utils/util.h"
 
 #include <algorithm>
+#include <cerrno>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <csignal>
+#include <ctime>
+#include <filesystem>
 #include <limits>
 #include <memory>
 #include <string>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <QColor>
-#include <QDateTime>
-#include <QDir>
 #include <QFontDatabase>
-#include <QLocale>
 #include <QPixmapCache>
-#include <QSurfaceFormat>
-#include <QFileInfo>
 #include <QPainterPath>
-#include <QTextStream>
-#include <QtXml/QDomDocument>
+#include <unordered_map>
 #include "common/util.h"
 
 // SegmentTree
@@ -101,7 +103,7 @@ void MessageBytesDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
 
   // Paint hex column
   const auto &bytes = *static_cast<std::vector<uint8_t> *>(data.value<void *>());
-  const auto &colors = *static_cast<std::vector<QColor> *>(index.data(ColorsRole).value<void *>());
+  const auto &colors = *static_cast<std::vector<CabanaColor> *>(index.data(ColorsRole).value<void *>());
 
   painter->setFont(fixed_font);
   const QPen text_pen(option.state & QStyle::State_Selected ? highlighted_color : text_color);
@@ -116,7 +118,7 @@ void MessageBytesDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
         painter->setPen(option.palette.color(QPalette::Text));
         painter->fillRect(r, option.palette.color(QPalette::Window));
       }
-      painter->fillRect(r, colors[i]);
+      painter->fillRect(r, toQColor(colors[i]));
     } else {
       painter->setPen(text_pen);
     }
@@ -149,53 +151,210 @@ void TabBar::closeTabClicked() {
 
 // UnixSignalHandler
 
-UnixSignalHandler::UnixSignalHandler(QObject *parent) : QObject(nullptr) {
+UnixSignalHandler::UnixSignalHandler() {
   if (::socketpair(AF_UNIX, SOCK_STREAM, 0, sig_fd)) {
     qFatal("Couldn't create TERM socketpair");
   }
 
-  sn = new QSocketNotifier(sig_fd[1], QSocketNotifier::Read, this);
-  connect(sn, &QSocketNotifier::activated, this, &UnixSignalHandler::handleSigTerm);
+  waiter = std::thread([this]() {
+    int tmp = 0;
+    while (::read(sig_fd[1], &tmp, sizeof(tmp)) < 0) {
+      if (errno != EINTR) return;
+    }
+    if (shutting_down.load()) return;
+
+    // Marshal exit onto the GUI thread (qApp methods are not thread-safe).
+    QMetaObject::invokeMethod(qApp, []() {
+      printf("\nexiting...\n");
+      qApp->closeAllWindows();
+      qApp->exit();
+    }, Qt::QueuedConnection);
+  });
+
   std::signal(SIGINT, signalHandler);
   std::signal(SIGTERM, UnixSignalHandler::signalHandler);
 }
 
 UnixSignalHandler::~UnixSignalHandler() {
+  shutting_down.store(true);
+  int dummy = 0;
+  (void)!::write(sig_fd[0], &dummy, sizeof(dummy));
+  if (waiter.joinable()) waiter.join();
   ::close(sig_fd[0]);
   ::close(sig_fd[1]);
 }
 
 void UnixSignalHandler::signalHandler(int s) {
-  ::write(sig_fd[0], &s, sizeof(s));
-}
-
-void UnixSignalHandler::handleSigTerm() {
-  sn->setEnabled(false);
-  int tmp;
-  ::read(sig_fd[1], &tmp, sizeof(tmp));
-
-  printf("\nexiting...\n");
-  qApp->closeAllWindows();
-  qApp->exit();
+  (void)!::write(sig_fd[0], &s, sizeof(s));
 }
 
 // NameValidator
 
-NameValidator::NameValidator(QObject *parent) : QRegExpValidator(QRegExp("^(\\w+)"), parent) {}
+NameValidator::NameValidator(QObject *parent) : QValidator(parent) {}
 
 QValidator::State NameValidator::validate(QString &input, int &pos) const {
+  Q_UNUSED(pos);
   input.replace(' ', '_');
-  return QRegExpValidator::validate(input, pos);
+  if (input.isEmpty()) return QValidator::Intermediate;
+  for (const QChar &c : input) {
+    if (!c.isLetterOrNumber() && c != '_') return QValidator::Invalid;
+  }
+  return QValidator::Acceptable;
 }
 
-DoubleValidator::DoubleValidator(QObject *parent) : QDoubleValidator(parent) {
-  // Match locale of QString::toDouble() instead of system
-  QLocale locale(QLocale::C);
-  locale.setNumberOptions(QLocale::RejectGroupSeparator);
-  setLocale(locale);
+// NodeValidator
+
+NodeValidator::NodeValidator(QObject *parent) : QValidator(parent) {}
+
+QValidator::State NodeValidator::validate(QString &input, int &pos) const {
+  Q_UNUSED(pos);
+  if (input.isEmpty()) return QValidator::Intermediate;
+  // Match ^\w+(,\w+)*$ ; a trailing comma is Intermediate (user still typing).
+  bool need_word = true;
+  for (const QChar &c : input) {
+    if (c.isLetterOrNumber() || c == '_') {
+      need_word = false;
+    } else if (c == ',' && !need_word) {
+      need_word = true;
+    } else {
+      return QValidator::Invalid;
+    }
+  }
+  return need_word ? QValidator::Intermediate : QValidator::Acceptable;
+}
+
+// NonWhitespaceValidator
+
+NonWhitespaceValidator::NonWhitespaceValidator(QObject *parent) : QValidator(parent) {}
+
+QValidator::State NonWhitespaceValidator::validate(QString &input, int &pos) const {
+  Q_UNUSED(pos);
+  if (input.isEmpty()) return QValidator::Intermediate;
+  for (const QChar &c : input) {
+    if (c.isSpace()) return QValidator::Invalid;
+  }
+  return QValidator::Acceptable;
+}
+
+// IpAddressValidator
+
+IpAddressValidator::IpAddressValidator(QObject *parent) : QValidator(parent) {}
+
+QValidator::State IpAddressValidator::validate(QString &input, int &pos) const {
+  Q_UNUSED(pos);
+  if (input.isEmpty()) return QValidator::Intermediate;
+
+  int dots = 0;
+  int value = 0;
+  bool has_digit = false;
+  for (const QChar &c : input) {
+    if (c.isDigit()) {
+      value = has_digit ? value * 10 + c.digitValue() : c.digitValue();
+      if (value > 255) return QValidator::Invalid;
+      has_digit = true;
+    } else if (c == '.') {
+      if (!has_digit || dots >= 3) return QValidator::Invalid;
+      ++dots;
+      has_digit = false;
+      value = 0;
+    } else {
+      return QValidator::Invalid;
+    }
+  }
+  return (dots == 3 && has_digit) ? QValidator::Acceptable : QValidator::Intermediate;
+}
+
+DoubleValidator::DoubleValidator(QObject *parent) : QValidator(parent) {}
+
+QValidator::State DoubleValidator::validate(QString &input, int &pos) const {
+  Q_UNUSED(pos);
+  if (input.isEmpty()) return QValidator::Intermediate;
+
+  // Match QString::toDouble(): C locale, no hex floats / inf / nan.
+  const std::string bytes = input.toLatin1().toStdString();
+  // strtod accepts 0x… hex floats and p-exponents; QString::toDouble does not.
+  if (bytes.find_first_of("xXpP") != std::string::npos) {
+    return QValidator::Invalid;
+  }
+
+  const char *start = bytes.c_str();
+  char *end = nullptr;
+  const double value = std::strtod(start, &end);
+  if (end == start) {
+    // Still typing a sign, decimal point, or exponent prefix.
+    if (input == "-" || input == "+" || input == "." || input == "-." || input == "+.") {
+      return QValidator::Intermediate;
+    }
+    return QValidator::Invalid;
+  }
+  if (*end == '\0') {
+    // Reject inf/nan (strtod accepts them; QDoubleValidator / toDouble path should not).
+    return std::isfinite(value) ? QValidator::Acceptable : QValidator::Invalid;
+  }
+
+  // Partial exponent / trailing sign while typing (e.g. "1e", "1e-", "1.").
+  for (const char *p = end; *p; ++p) {
+    const char c = *p;
+    if (!(c == 'e' || c == 'E' || c == '+' || c == '-' || c == '.' || (c >= '0' && c <= '9'))) {
+      return QValidator::Invalid;
+    }
+  }
+  return QValidator::Intermediate;
 }
 
 namespace utils {
+
+std::string homePath() {
+  const char *home = ::getenv("HOME");
+  return home ? home : "";
+}
+
+std::filesystem::path configPath() {
+#ifdef __APPLE__
+  return std::filesystem::path(homePath()) / "Library/Preferences";
+#else
+  const char *xdg = ::getenv("XDG_CONFIG_HOME");
+  return (xdg && xdg[0]) ? std::filesystem::path(xdg) : std::filesystem::path(homePath()) / ".config";
+#endif
+}
+
+#ifdef __APPLE__
+static const char *clipboard_read_cmds[] = {"pbpaste"};
+static const char *clipboard_write_cmds[] = {"pbcopy"};
+#else
+static const char *clipboard_read_cmds[] = {"wl-paste --no-newline 2>/dev/null", "xclip -selection clipboard -o 2>/dev/null", "xsel -ob 2>/dev/null"};
+static const char *clipboard_write_cmds[] = {"wl-copy 2>/dev/null", "xclip -selection clipboard 2>/dev/null", "xsel -ib 2>/dev/null"};
+#endif
+
+bool getClipboardText(std::string *text) {
+  text->clear();
+  bool has_tool = false;
+  for (const char *cmd : clipboard_read_cmds) {
+    FILE *f = ::popen(cmd, "r");
+    if (!f) continue;
+    std::string out;
+    char buf[4096];
+    for (size_t n; (n = ::fread(buf, 1, sizeof(buf), f)) > 0;) out.append(buf, n);
+    int status = ::pclose(f);
+    if (status == 0) {
+      *text = std::move(out);
+      return true;
+    }
+    has_tool |= WIFEXITED(status) && WEXITSTATUS(status) != 127;  // 127: command not found
+  }
+  return has_tool;  // tool present but clipboard empty
+}
+
+bool setClipboardText(const std::string &text) {
+  std::signal(SIGPIPE, SIG_IGN);
+  for (const char *cmd : clipboard_write_cmds) {
+    FILE *f = ::popen(cmd, "w");
+    if (!f) continue;
+    size_t written = ::fwrite(text.data(), 1, text.size(), f);
+    if (::pclose(f) == 0 && written == text.size()) return true;
+  }
+  return false;
+}
 
 bool isDarkTheme() {
   QColor windowColor = QApplication::palette().color(QPalette::Window);
@@ -209,7 +368,10 @@ QPixmap icon(const QString &id) {
   QString key = "bootstrap_" % id % (dark_theme ? "1" : "0");
   if (!QPixmapCache::find(key, &pm)) {
     pm = bootstrapPixmap(id);
-    if (dark_theme) {
+    // IQ.Pilot patch: ToolButton("") (chartswidget.cc) asks for an empty id, so pm can
+    // be null. Painting a null QPixmap is a no-op that logs two QPainter warnings on
+    // every dark-theme start. Upstream candidate.
+    if (dark_theme && !pm.isNull()) {
       QPainter p(&pm);
       p.setCompositionMode(QPainter::CompositionMode_SourceIn);
       p.fillRect(pm.rect(), QColor("#bbbbbb"));
@@ -258,10 +420,34 @@ void setTheme(int theme) {
 }
 
 QString formatSeconds(double sec, bool include_milliseconds, bool absolute_time) {
-  QString format = absolute_time ? "yyyy-MM-dd hh:mm:ss"
-                                 : (sec > 60 * 60 ? "hh:mm:ss" : "mm:ss");
-  if (include_milliseconds) format += ".zzz";
-  return QDateTime::fromMSecsSinceEpoch(sec * 1000).toString(format);
+  if (absolute_time) {
+    const auto ms_total = static_cast<int64_t>(std::llround(sec * 1000.0));
+    const std::time_t secs = static_cast<std::time_t>(ms_total / 1000);
+    int millis = static_cast<int>(ms_total % 1000);
+    if (millis < 0) millis = -millis;
+    std::tm tm{};
+    localtime_r(&secs, &tm);
+    char buf[64];
+    std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
+    if (include_milliseconds) {
+      return QString::asprintf("%s.%03d", buf, millis);
+    }
+    return QString::fromUtf8(buf);
+  }
+
+  // Relative duration (not wall-clock).
+  const bool show_hours = sec > 60 * 60;
+  int total_ms = static_cast<int>(std::llround(std::max(0.0, sec) * 1000.0));
+  const int hours = total_ms / (3600 * 1000);
+  const int minutes = (total_ms / (60 * 1000)) % 60;
+  const int seconds = (total_ms / 1000) % 60;
+  const int millis = total_ms % 1000;
+  if (show_hours) {
+    return include_milliseconds ? QString::asprintf("%02d:%02d:%02d.%03d", hours, minutes, seconds, millis)
+                                : QString::asprintf("%02d:%02d:%02d", hours, minutes, seconds);
+  }
+  return include_milliseconds ? QString::asprintf("%02d:%02d.%03d", minutes, seconds, millis)
+                              : QString::asprintf("%02d:%02d", minutes, seconds);
 }
 
 }  // namespace utils
@@ -278,22 +464,8 @@ QString signalToolTip(const cabana::Signal *sig) {
     Start Bit: %2 Size: %3<br />
     MSB: %4 LSB: %5<br />
     Little Endian: %6 Signed: %7</span>
-  )").arg(sig->name).arg(sig->start_bit).arg(sig->size).arg(sig->msb).arg(sig->lsb)
+  )").arg(QString::fromStdString(sig->name)).arg(sig->start_bit).arg(sig->size).arg(sig->msb).arg(sig->lsb)
      .arg(sig->is_little_endian ? "Y" : "N").arg(sig->is_signed ? "Y" : "N");
-}
-
-void setSurfaceFormat() {
-  QSurfaceFormat fmt;
-#ifdef __APPLE__
-  fmt.setVersion(3, 2);
-  fmt.setProfile(QSurfaceFormat::OpenGLContextProfile::CoreProfile);
-  fmt.setRenderableType(QSurfaceFormat::OpenGL);
-#else
-  fmt.setRenderableType(QSurfaceFormat::OpenGLES);
-#endif
-  fmt.setSamples(16);
-  fmt.setStencilBufferSize(1);
-  QSurfaceFormat::setDefaultFormat(fmt);
 }
 
 void sigTermHandler(int s) {
@@ -306,55 +478,68 @@ void initApp(int argc, char *argv[], bool disable_hidpi) {
   std::signal(SIGINT, sigTermHandler);
   std::signal(SIGTERM, sigTermHandler);
 
-  QString app_dir;
+  std::filesystem::path app_dir;
 #ifdef __APPLE__
   // Get the devicePixelRatio, and scale accordingly to maintain 1:1 rendering
   QApplication tmp(argc, argv);
-  app_dir = QCoreApplication::applicationDirPath();
+  app_dir = QCoreApplication::applicationDirPath().toStdString();
   if (disable_hidpi) {
     qputenv("QT_SCALE_FACTOR", QString::number(1.0 / tmp.devicePixelRatio()).toLocal8Bit());
   }
 #else
-  app_dir = QFileInfo(util::readlink("/proc/self/exe").c_str()).path();
+  app_dir = std::filesystem::path(util::readlink("/proc/self/exe")).parent_path();
 #endif
 
-  qputenv("QT_DBL_CLICK_DIST", QByteArray::number(150));
+  qputenv("QT_DBL_CLICK_DIST", "150");
   // ensure the current dir matches the exectuable's directory
-  QDir::setCurrent(app_dir);
-
-  setSurfaceFormat();
+  std::error_code ec;
+  std::filesystem::current_path(app_dir, ec);
 }
 
-static QHash<QString, QByteArray> load_bootstrap_icons() {
-  QHash<QString, QByteArray> icons;
+// embedded at build time from the bootstrap_icons package (see SConscript)
+extern const unsigned char bootstrap_icons_svg[];
+extern const size_t bootstrap_icons_svg_len;
 
-  QFile f(":/bootstrap-icons.svg");
-  if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    QDomDocument xml;
-    xml.setContent(&f);
-    QDomNode n = xml.documentElement().firstChild();
-    while (!n.isNull()) {
-      QDomElement e = n.toElement();
-      if (!e.isNull() && e.hasAttribute("id")) {
-        QString svg_str;
-        QTextStream stream(&svg_str);
-        n.save(stream, 0);
-        svg_str.replace("<symbol", "<svg");
-        svg_str.replace("</symbol>", "</svg>");
-        icons[e.attribute("id")] = svg_str.toUtf8();
+static std::unordered_map<std::string, std::string> load_bootstrap_icons() {
+  std::unordered_map<std::string, std::string> icons;
+
+  const std::string content(reinterpret_cast<const char *>(bootstrap_icons_svg), bootstrap_icons_svg_len);
+  const std::string sym_open = "<symbol ";
+  const std::string sym_close = "</symbol>";
+  const std::string id_attr = "id=\"";
+
+  size_t pos = 0;
+  while ((pos = content.find(sym_open, pos)) != std::string::npos) {
+    size_t end = content.find(sym_close, pos);
+    if (end == std::string::npos) break;
+    end += sym_close.size();
+
+    // extract id
+    size_t id_start = content.find(id_attr, pos);
+    if (id_start != std::string::npos && id_start < end) {
+      id_start += id_attr.size();
+      size_t id_end = content.find('"', id_start);
+      if (id_end != std::string::npos && id_end < end) {
+        std::string id = content.substr(id_start, id_end - id_start);
+        std::string svg_str = content.substr(pos, end - pos);
+        // replace <symbol with <svg, </symbol> with </svg>
+        svg_str.replace(0, 7, "<svg");               // "<symbol" (7) -> "<svg" (4)
+        svg_str.replace(svg_str.size() - 9, 9, "</svg>");  // "</symbol>" (9) -> "</svg>" (6)
+        icons[id] = std::move(svg_str);
       }
-      n = n.nextSibling();
     }
+    pos = end;
   }
   return icons;
 }
 
 QPixmap bootstrapPixmap(const QString &id) {
-  static QHash<QString, QByteArray> icons = load_bootstrap_icons();
+  static auto icons = load_bootstrap_icons();
 
   QPixmap pixmap;
-  if (auto it = icons.find(id); it != icons.end()) {
-    pixmap.loadFromData(it.value(), "svg");
+  auto it = icons.find(id.toStdString());
+  if (it != icons.end()) {
+    pixmap.loadFromData((const uchar *)it->second.data(), it->second.size(), "svg");
   }
   return pixmap;
 }

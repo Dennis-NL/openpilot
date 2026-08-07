@@ -1,6 +1,6 @@
 # Cabana
 
-Cabana is a tool developed to view raw CAN data. One use for this is creating and editing [CAN Dictionaries](http://socialledge.com/sjsu/index.php/DBC_Format) (DBC files), and the tool provides direct integration with [commaai/iqdbc](https://github.com/commaai/iqdbc) (a collection of DBC files), allowing you to load the DBC files direct from source, and save to your fork. In addition, you can load routes from [comma connect](https://connect.comma.ai).
+Cabana is a tool developed to view raw CAN data. One use for this is creating and editing [CAN Dictionaries](http://socialledge.com/sjsu/index.php/DBC_Format) (DBC files), and the tool provides direct integration with iqdbc (a collection of DBC files), allowing you to load the DBC files direct from source, and save to your fork. In addition, you can load routes from [konn3kt](https://konn3kt.com).
 
 ## Usage Instructions
 
@@ -28,7 +28,7 @@ Options:
 
 Arguments:
   route                          the drive to replay. find your drives at
-                                 connect.comma.ai
+                                 konn3kt.com
 ```
 
 ## Examples
@@ -45,17 +45,17 @@ cabana --demo
 To load a specific route for replay, provide the route as an argument:
 
 ```shell
-cabana "a2a0ccea32023010|2023-07-27--13-01-19"
+cabana "5beb9b58bd12b691/0000010a--a51155e496"
 ```
 
-Replace "0ccea32023010|2023-07-27--13-01-19" with your desired route identifier.
+Replace "5beb9b58bd12b691/0000010a--a51155e496" with your desired route identifier.
 
 
 ### Running Cabana with multiple cameras
 To run Cabana with multiple cameras, use the following command:
 
 ```shell
-cabana "a2a0ccea32023010|2023-07-27--13-01-19" --dcam --ecam
+cabana "5beb9b58bd12b691/0000010a--a51155e496" --dcam --ecam
 ```
 
 ### Streaming CAN Messages from a comma Device
@@ -63,8 +63,8 @@ cabana "a2a0ccea32023010|2023-07-27--13-01-19" --dcam --ecam
 [SSH into your device](https://github.com/commaai/openpilot/wiki/SSH) and start the bridge with the following command:
 
 ```shell
-cd /data/openpilot/cereal/messaging/
-./bridge &
+cd /data/openpilot
+./cereal/messaging/bridge &
 ```
 
 Then Run Cabana with the device's IP address:
@@ -73,7 +73,24 @@ Then Run Cabana with the device's IP address:
 cabana --zmq <ipaddress>
 ```
 
-Replace &lt;ipaddress&gt; with your comma device's IP address.
+Replace &lt;ipaddress&gt; with your device's IP address.
+
+If you can't run the bridge on the device, `--bridge <ipaddress>` runs
+`cereal/messaging/bridge` locally against the device instead.
+
+### Streaming CAN Messages from a Remote Device over konn3kt
+
+To watch a device that isn't on your network, `tools/cabana/konn3kt_canproxy.py`
+re-publishes its live CAN onto a local ZMQ socket:
+
+```shell
+export KONN3KT_JWT="<your konn3kt jwt>"
+./tools/cabana/konn3kt_canproxy.py <dongle_id>
+cabana --zmq 127.0.0.1
+```
+
+The device must have `CanLiveStreaming` enabled so `canlived` is running. See the
+header of `konn3kt_canproxy.py` for the full topology.
 
 While streaming from the device, Cabana will log the CAN messages to a local directory. By default, this directory is ~/cabana_live_stream/. You can change the log directory in Cabana by navigating to menu -> tools -> settings.
 

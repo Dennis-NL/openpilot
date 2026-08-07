@@ -1,4 +1,5 @@
 #include "tools/cabana/historylog.h"
+#include "tools/cabana/dbc/dbcqt.h"
 
 #include <functional>
 
@@ -14,7 +15,7 @@ QVariant HistoryLogModel::data(const QModelIndex &index, int role) const {
   const int col = index.column();
   if (role == Qt::DisplayRole) {
     if (col == 0) return QString::number(can->toSeconds(m.mono_time), 'f', 3);
-    if (!isHexMode()) return sigs[col - 1]->formatValue(m.sig_values[col - 1], false);
+    if (!isHexMode()) return QString::fromStdString(sigs[col - 1]->formatValue(m.sig_values[col - 1], false));
   } else if (role == Qt::TextAlignmentRole) {
     return (uint32_t)(Qt::AlignRight | Qt::AlignVCenter);
   }
@@ -49,12 +50,12 @@ QVariant HistoryLogModel::headerData(int section, Qt::Orientation orientation, i
       if (section == 0) return "Time";
       if (isHexMode()) return "Data";
 
-      QString name = sigs[section - 1]->name;
-      QString unit = sigs[section - 1]->unit;
+      QString name = QString::fromStdString(sigs[section - 1]->name);
+      QString unit = QString::fromStdString(sigs[section - 1]->unit);
       return unit.isEmpty() ? name : QString("%1 (%2)").arg(name, unit);
     } else if (role == Qt::BackgroundRole && section > 0 && !isHexMode()) {
       // Alpha-blend the signal color with the background to ensure contrast
-      QColor sigColor = sigs[section - 1]->color;
+      QColor sigColor = toQColor(sigs[section - 1]->color);
       sigColor.setAlpha(128);
       return QBrush(sigColor);
     }
@@ -207,8 +208,8 @@ LogsWidget::LogsWidget(QWidget *parent) : QFrame(parent) {
   QObject::connect(value_edit, &QLineEdit::textEdited, this, &LogsWidget::filterChanged);
   QObject::connect(export_btn, &QToolButton::clicked, this, &LogsWidget::exportToCSV);
   QObject::connect(can, &AbstractStream::seekedTo, model, &HistoryLogModel::reset);
-  QObject::connect(dbc(), &DBCManager::DBCFileChanged, model, &HistoryLogModel::reset);
-  QObject::connect(UndoStack::instance(), &QUndoStack::indexChanged, model, &HistoryLogModel::reset);
+  QObject::connect(dbcNotifier(), &QtDBCNotifier::DBCFileChanged, model, &HistoryLogModel::reset);
+  QObject::connect(undoNotifier(), &QtUndoNotifier::indexChanged, model, &HistoryLogModel::reset);
   QObject::connect(model, &HistoryLogModel::modelReset, this, &LogsWidget::modelReset);
   QObject::connect(model, &HistoryLogModel::rowsInserted, [this]() { export_btn->setEnabled(true); });
 }
@@ -216,7 +217,7 @@ LogsWidget::LogsWidget(QWidget *parent) : QFrame(parent) {
 void LogsWidget::modelReset() {
   signals_cb->clear();
   for (auto s : model->sigs) {
-    signals_cb->addItem(s->name);
+    signals_cb->addItem(QString::fromStdString(s->name));
   }
   export_btn->setEnabled(false);
   value_edit->clear();
@@ -238,11 +239,11 @@ void LogsWidget::filterChanged() {
 }
 
 void LogsWidget::exportToCSV() {
-  QString dir = QString("%1/%2_%3.csv").arg(settings.last_dir).arg(can->routeName()).arg(msgName(model->msg_id));
-  QString fn = QFileDialog::getSaveFileName(this, QString("Export %1 to CSV file").arg(msgName(model->msg_id)),
+  QString dir = QString("%1/%2_%3.csv").arg(QString::fromStdString(settings.last_dir)).arg(QString::fromStdString(can->routeName())).arg(QString::fromStdString(msgName(model->msg_id)));
+  QString fn = QFileDialog::getSaveFileName(this, QString("Export %1 to CSV file").arg(QString::fromStdString(msgName(model->msg_id))),
                                             dir, tr("csv (*.csv)"));
   if (!fn.isEmpty()) {
-    model->isHexMode() ? utils::exportToCSV(fn, model->msg_id)
-                       : utils::exportSignalsToCSV(fn, model->msg_id);
+    model->isHexMode() ? utils::exportToCSV(fn.toStdString(), model->msg_id)
+                       : utils::exportSignalsToCSV(fn.toStdString(), model->msg_id);
   }
 }

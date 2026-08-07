@@ -1,6 +1,7 @@
 #include "tools/cabana/videowidget.h"
 
 #include <algorithm>
+#include <thread>
 
 #include <QAction>
 #include <QActionGroup>
@@ -9,20 +10,20 @@
 #include <QPainter>
 #include <QStyleOptionSlider>
 #include <QVBoxLayout>
-#include <QtConcurrent>
 
 #include "tools/cabana/tools/routeinfo.h"
 
 const int MIN_VIDEO_HEIGHT = 100;
 const int THUMBNAIL_MARGIN = 3;
 
+// Indexed by TimelineType: None, Engaged, AlertInfo, AlertWarning, AlertCritical, UserBookmark
 static const QColor timeline_colors[] = {
-  [(int)TimelineType::None] = QColor(111, 143, 175),
-  [(int)TimelineType::Engaged] = QColor(0, 163, 108),
-  [(int)TimelineType::UserBookmark] = Qt::magenta,
-  [(int)TimelineType::AlertInfo] = Qt::green,
-  [(int)TimelineType::AlertWarning] = QColor(255, 195, 0),
-  [(int)TimelineType::AlertCritical] = QColor(199, 0, 57),
+  QColor(111, 143, 175),
+  QColor(0, 163, 108),
+  Qt::green,
+  QColor(255, 195, 0),
+  QColor(199, 0, 57),
+  Qt::magenta,
 };
 
 static Replay *getReplay() {
@@ -50,7 +51,7 @@ VideoWidget::VideoWidget(QWidget *parent) : QFrame(parent) {
   updatePlayBtnState();
   setWhatsThis(tr(R"(
     <b>Video</b><br />
-    <!-- TODO: add descprition here -->
+    <!-- TODO: add description here -->
     <span style="color:gray">Timeline color</span>
     <table>
     <tr><td><span style="color:%1;">■ </span>Disengaged </td>
@@ -156,7 +157,7 @@ QWidget *VideoWidget::createCameraWidget() {
   slider->setTimeRange(can->minSeconds(), can->maxSeconds());
 
   QObject::connect(slider, &QSlider::sliderReleased, [this]() { can->seekTo(slider->currentSecond()); });
-  QObject::connect(can, &AbstractStream::paused, cam_widget, [c = cam_widget]() { c->showPausedOverlay(); });
+  QObject::connect(can, &AbstractStream::paused, cam_widget, qOverload<>(&StreamCameraView::update));
   QObject::connect(can, &AbstractStream::eventsMerged, this, [this]() { slider->update(); });
   QObject::connect(cam_widget, &CameraWidget::clicked, []() { can->pause(!can->isPaused()); });
   QObject::connect(cam_widget, &CameraWidget::vipcAvailableStreamsUpdated, this, &VideoWidget::vipcAvailableStreamsUpdated);
@@ -202,7 +203,7 @@ void VideoWidget::timeRangeChanged() {
 
 QString VideoWidget::formatTime(double sec, bool include_milliseconds) {
   if (settings.absolute_time)
-    sec = can->beginDateTime().addMSecs(sec * 1000).toMSecsSinceEpoch() / 1000.0;
+    sec += std::chrono::duration<double>(can->beginDateTime().time_since_epoch()).count();
   return utils::formatSeconds(sec, include_milliseconds, settings.absolute_time);
 }
 
@@ -323,34 +324,40 @@ void Slider::mousePressEvent(QMouseEvent *e) {
 // StreamCameraView
 StreamCameraView::StreamCameraView(std::string stream_name, VisionStreamType stream_type, QWidget *parent)
     : CameraWidget(stream_name, stream_type, parent) {
-  fade_animation = new QPropertyAnimation(this, "overlayOpacity");
-  fade_animation->setDuration(500);
-  fade_animation->setStartValue(0.2f);
-  fade_animation->setEndValue(0.7f);
-  fade_animation->setEasingCurve(QEasingCurve::InOutQuad);
-  connect(fade_animation, &QPropertyAnimation::valueChanged, this, QOverload<>::of(&StreamCameraView::update));
 }
 
 void StreamCameraView::parseQLog(std::shared_ptr<LogReader> qlog) {
   std::mutex mutex;
-  QtConcurrent::blockingMap(qlog->events.cbegin(), qlog->events.cend(), [this, &mutex](const Event &e) {
-    if (e.which == cereal::Event::Which::THUMBNAIL) {
-      capnp::FlatArrayMessageReader reader(e.data);
-      auto thumb_data = reader.getRoot<cereal::Event>().getThumbnail();
-      auto image_data = thumb_data.getThumbnail();
-      if (QPixmap thumb; thumb.loadFromData(image_data.begin(), image_data.size(), "jpeg")) {
-        QPixmap generated_thumb = generateThumbnail(thumb, can->toSeconds(thumb_data.getTimestampEof()));
-        std::lock_guard lock(mutex);
-        thumbnails[thumb_data.getTimestampEof()] = generated_thumb;
-        big_thumbnails[thumb_data.getTimestampEof()] = thumb;
+  const auto &events = qlog->events;
+  unsigned int num_threads = std::max(1u, std::thread::hardware_concurrency());
+  size_t chunk = (events.size() + num_threads - 1) / num_threads;
+  std::vector<std::thread> threads;
+  for (unsigned int t = 0; t < num_threads && t * chunk < events.size(); ++t) {
+    size_t start = t * chunk;
+    size_t end = std::min(start + chunk, events.size());
+    threads.emplace_back([this, &mutex, &events, start, end]() {
+      for (size_t i = start; i < end; ++i) {
+        const Event &e = events[i];
+        if (e.which == cereal::Event::Which::THUMBNAIL) {
+          capnp::FlatArrayMessageReader reader(e.data);
+          auto thumb_data = reader.getRoot<cereal::Event>().getThumbnail();
+          auto image_data = thumb_data.getThumbnail();
+          if (QPixmap thumb; thumb.loadFromData(image_data.begin(), image_data.size(), "jpeg")) {
+            QPixmap generated_thumb = generateThumbnail(thumb, can->toSeconds(thumb_data.getTimestampEof()));
+            std::lock_guard lock(mutex);
+            thumbnails[thumb_data.getTimestampEof()] = generated_thumb;
+            big_thumbnails[thumb_data.getTimestampEof()] = thumb;
+          }
+        }
       }
-    }
-  });
+    });
+  }
+  for (auto &th : threads) th.join();
   update();
 }
 
-void StreamCameraView::paintGL() {
-  CameraWidget::paintGL();
+void StreamCameraView::paintEvent(QPaintEvent *event) {
+  CameraWidget::paintEvent(event);
 
   QPainter p(this);
   bool scrubbing = false;
@@ -363,7 +370,7 @@ void StreamCameraView::paintGL() {
   }
 
   if (can->isPaused()) {
-    p.setPen(QColor(200, 200, 200, static_cast<int>(255 * fade_animation->currentValue().toFloat())));
+    p.setPen(QColor(200, 200, 200, static_cast<int>(255 * 0.7f)));
     p.setFont(QFont(font().family(), 16, QFont::Bold));
     p.drawText(rect(), Qt::AlignCenter, tr("PAUSED"));
   }
@@ -383,9 +390,9 @@ QPixmap StreamCameraView::generateThumbnail(QPixmap thumb, double seconds) {
 
 void StreamCameraView::drawScrubThumbnail(QPainter &p) {
   p.fillRect(rect(), Qt::black);
-  auto it = big_thumbnails.lowerBound(can->toMonoTime(thumbnail_dispaly_time));
+  auto it = big_thumbnails.lower_bound(can->toMonoTime(thumbnail_dispaly_time));
   if (it != big_thumbnails.end()) {
-    QPixmap scaled_thumb = it.value().scaled(rect().size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    QPixmap scaled_thumb = it->second.scaled(rect().size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
     QRect thumb_rect(rect().center() - scaled_thumb.rect().center(), scaled_thumb.size());
     p.drawPixmap(thumb_rect.topLeft(), scaled_thumb);
     drawTime(p, thumb_rect, thumbnail_dispaly_time);
@@ -393,9 +400,9 @@ void StreamCameraView::drawScrubThumbnail(QPainter &p) {
 }
 
 void StreamCameraView::drawThumbnail(QPainter &p) {
-  auto it = thumbnails.lowerBound(can->toMonoTime(thumbnail_dispaly_time));
+  auto it = thumbnails.lower_bound(can->toMonoTime(thumbnail_dispaly_time));
   if (it != thumbnails.end()) {
-    const QPixmap &thumb = it.value();
+    const QPixmap &thumb = it->second;
     auto [min_sec, max_sec] = can->timeRange().value_or(std::make_pair(can->minSeconds(), can->maxSeconds()));
     int pos = (thumbnail_dispaly_time - min_sec) * width() / (max_sec - min_sec);
     int x = std::clamp(pos - thumb.width() / 2, THUMBNAIL_MARGIN, width() - thumb.width() - THUMBNAIL_MARGIN + 1);

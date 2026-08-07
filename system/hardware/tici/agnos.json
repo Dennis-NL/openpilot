@@ -67,28 +67,28 @@
   },
   {
     "name": "boot",
-    "url": "https://sdn.konn3kt.com/agnos/16-iqlvbs/boot-179865564b1c196897c77edc41d99a8d4831a3a95564cac6868e7942cd11fd25.img.xz",
-    "hash": "179865564b1c196897c77edc41d99a8d4831a3a95564cac6868e7942cd11fd25",
-    "hash_raw": "179865564b1c196897c77edc41d99a8d4831a3a95564cac6868e7942cd11fd25",
+    "url": "https://sdn.konn3kt.com/agnos/16-iqlvbs/boot-50b102d3dfa5d0eea506d9586745470cd59bcea9a723408a6abc20ffd6493a89.img.xz",
+    "hash": "50b102d3dfa5d0eea506d9586745470cd59bcea9a723408a6abc20ffd6493a89",
+    "hash_raw": "50b102d3dfa5d0eea506d9586745470cd59bcea9a723408a6abc20ffd6493a89",
     "size": 18216960,
     "sparse": false,
     "full_check": true,
     "has_ab": true,
-    "ondevice_hash": "2c969938fdd59528e6244820b77ec6b2cef9ab49cc9fedd490b0b3d195c189e4"
+    "ondevice_hash": "fdcb135e8412a896c4a882738a7022f6b7779939d8716f24b9a566b0b3ff3757"
   },
   {
     "name": "system",
-    "url": "https://sdn.konn3kt.com/agnos/16-iqlvbs/system-03397de3da2e9a6d2808b95b72c945b3af71ab79f7f0298624aed62b8749fc5a.img.xz",
-    "hash": "0c9e7dee6c7365600c77b33c4996456459d04aad005e3e41bf6ee2e8af74ceb9",
-    "hash_raw": "03397de3da2e9a6d2808b95b72c945b3af71ab79f7f0298624aed62b8749fc5a",
+    "url": "https://sdn.konn3kt.com/agnos/16-iqlvbs/system-a473962357e3c0c7639af17006def4567f02e64d578b00e2e0037012755be5cd.img.xz",
+    "hash": "62a08bdf79f6dc0075eba8b93b55cbac6eeee0ecd2b6e8ab05d51ef61a9a880a",
+    "hash_raw": "a473962357e3c0c7639af17006def4567f02e64d578b00e2e0037012755be5cd",
     "size": 6291456000,
     "sparse": true,
     "full_check": false,
     "has_ab": true,
-    "ondevice_hash": "1ee589d3d728a03561718383bf640171f1aef048573e46fe17239617c7c19fff",
+    "ondevice_hash": "9ed5bc147a6d4c2e0a89562f31096a7802485ee8e740defeab7674abbf6d4baa",
     "alt": {
-      "hash": "03397de3da2e9a6d2808b95b72c945b3af71ab79f7f0298624aed62b8749fc5a",
-      "url": "https://sdn.konn3kt.com/agnos/16-iqlvbs/system-03397de3da2e9a6d2808b95b72c945b3af71ab79f7f0298624aed62b8749fc5a.img",
+      "hash": "a473962357e3c0c7639af17006def4567f02e64d578b00e2e0037012755be5cd",
+      "url": "https://sdn.konn3kt.com/agnos/16-iqlvbs/system-a473962357e3c0c7639af17006def4567f02e64d578b00e2e0037012755be5cd.img",
       "size": 6291456000
     }
   }

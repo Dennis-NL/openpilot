@@ -128,6 +128,16 @@ function launch {
     fi
   fi
 
+  # Best-effort: install the verified runtime before anything starts the services that
+  # need it. This only succeeds on a tree that has built _verified_import.so, so on a
+  # prebuilt release install it is a no-op -- there the runtime arrives with the IQ.OS
+  # flash, whose image bakes it in. What actually fixes the 20+ minute first-install hang
+  # is --no-block on the service starts below: hephaestusd/ble-transportd/flockd each
+  # ExecStartPre-wait up to 600s for /usr/libexec/iqpilot/iqpilot_bundle_runner.
+  if [ -x "$DIR/system/proprietary_runtime/install_verified_runtime.sh" ]; then
+    "$DIR/system/proprietary_runtime/install_verified_runtime.sh" || true
+  fi
+
   # Install/update proprietary runtime bundles.
   if [ -f "$DIR/artifacts/runtime/ensure_private_installed.sh" ]; then
     bash "$DIR/artifacts/runtime/ensure_private_installed.sh" || true
@@ -161,10 +171,12 @@ function launch {
         sudo mount -o remount,ro /
       fi
       sudo systemctl enable "${service_name}.service"
+      # --no-block: these units ExecStartPre-wait for the verified runtime. Blocking here
+      # made a missing runner stall the whole install for the unit's 600s timeout (x3 units).
       if systemctl is-active --quiet "${service_name}.service"; then
-        sudo systemctl restart "${service_name}.service"
+        sudo systemctl restart --no-block "${service_name}.service"
       else
-        sudo systemctl start "${service_name}.service"
+        sudo systemctl start --no-block "${service_name}.service"
       fi
     elif [ -f "$service_src" ]; then
       if [ ! -f "$service_dst" ] || ! cmp -s "$service_src" "$service_dst"; then
@@ -173,9 +185,9 @@ function launch {
         sudo systemctl daemon-reload
         sudo systemctl enable "${service_name}.service"
         sudo mount -o remount,ro /
-        sudo systemctl restart "${service_name}.service"
+        sudo systemctl restart --no-block "${service_name}.service"
       elif ! systemctl is-active --quiet "${service_name}.service"; then
-        sudo systemctl start "${service_name}.service"
+        sudo systemctl start --no-block "${service_name}.service"
       fi
     fi
   done

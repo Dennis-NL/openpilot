@@ -1,11 +1,13 @@
 #include "tools/cabana/streams/pandastream.h"
 
-#include <QDebug>
+#include <chrono>
+#include <cstdio>
+#include <thread>
+
 #include <QCheckBox>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QThread>
 #include <QTimer>
 
 PandaStream::PandaStream(QObject *parent, PandaStreamConfig config_) : config(config_), LiveStream(parent) {
@@ -16,34 +18,48 @@ PandaStream::PandaStream(QObject *parent, PandaStreamConfig config_) : config(co
 
 bool PandaStream::connect() {
   try {
-    qDebug() << "Connecting to panda " << config.serial;
-    panda.reset(new Panda(config.serial.toStdString(), 0, true));
+    fprintf(stderr, "Connecting to panda %s\n", config.serial.c_str());
+    panda.reset(new Panda(config.serial));
     config.bus_config.resize(3);
-    qDebug() << "Connected";
+    fprintf(stderr, "Connected\n");
   } catch (const std::exception& e) {
     return false;
   }
 
+  panda->set_safety_model(cereal::CarParams::SafetyModel::NO_OUTPUT);
+  for (int bus = 0; bus < config.bus_config.size(); bus++) {
+    panda->set_can_speed_kbps(bus, config.bus_config[bus].can_speed_kbps);
+
+    // CAN-FD
+    if (panda->hw_type == cereal::PandaState::PandaType::RED_PANDA || panda->hw_type == cereal::PandaState::PandaType::RED_PANDA_V2) {
+      if (config.bus_config[bus].can_fd) {
+        panda->set_data_speed_kbps(bus, config.bus_config[bus].data_speed_kbps);
+      } else {
+        // Hack to disable can-fd by setting data speed to a low value
+        panda->set_data_speed_kbps(bus, 10);
+      }
+    }
+  }
   return true;
 }
 
 void PandaStream::streamThread() {
   std::vector<can_frame> raw_can_data;
 
-  while (!QThread::currentThread()->isInterruptionRequested()) {
-    QThread::msleep(1);
+  while (!exit_) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
     if (!panda->connected()) {
-      qDebug() << "Connection to panda lost. Attempting reconnect.";
+      fprintf(stderr, "Connection to panda lost. Attempting reconnect.\n");
       if (!connect()){
-        QThread::msleep(1000);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         continue;
       }
     }
 
     raw_can_data.clear();
     if (!panda->can_receive(raw_can_data)) {
-      qDebug() << "failed to receive";
+      fprintf(stderr, "failed to receive\n");
       continue;
     }
 
@@ -58,6 +74,7 @@ void PandaStream::streamThread() {
 
     handleEvent(capnp::messageToFlatArray(msg));
 
+    panda->send_heartbeat(false);
   }
 }
 
@@ -66,7 +83,7 @@ void PandaStream::streamThread() {
 OpenPandaWidget::OpenPandaWidget(QWidget *parent) : AbstractOpenStreamWidget(parent) {
   form_layout = new QFormLayout(this);
   if (can && dynamic_cast<PandaStream *>(can) != nullptr) {
-    form_layout->addWidget(new QLabel(tr("Already connected to %1.").arg(can->routeName())));
+    form_layout->addWidget(new QLabel(tr("Already connected to %1.").arg(QString::fromStdString(can->routeName()))));
     form_layout->addWidget(new QLabel("Close the current connection via [File menu -> Close Stream] before connecting to another Panda."));
     QTimer::singleShot(0, [this]() { emit enableOpenButton(false); });
     return;
@@ -105,16 +122,16 @@ void OpenPandaWidget::buildConfigForm() {
   bool has_panda = !serial.isEmpty();
   if (has_panda) {
     try {
-      Panda panda(serial.toStdString(), 0, true);
+      Panda panda(serial.toStdString());
       has_fd = (panda.hw_type == cereal::PandaState::PandaType::RED_PANDA) || (panda.hw_type == cereal::PandaState::PandaType::RED_PANDA_V2);
     } catch (const std::exception& e) {
-      qDebug() << "failed to open panda" << serial;
+      fprintf(stderr, "failed to open panda %s\n", serial.toUtf8().constData());
       has_panda = false;
     }
   }
 
   if (has_panda) {
-    config.serial = serial;
+    config.serial = serial.toStdString();
     config.bus_config.resize(3);
     for (int i = 0; i < config.bus_config.size(); i++) {
       QHBoxLayout *bus_layout = new QHBoxLayout;

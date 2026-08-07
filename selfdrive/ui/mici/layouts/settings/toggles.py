@@ -18,13 +18,15 @@ class TogglesLayoutMici(NavScroller):
     disengage = BigParamControl("disengage on accelerator", "DisengageOnAccelerator")
     ldw = BigParamControl("lane departure warnings", "IsLdwEnabled")
     is_metric = BigParamControl("use metric units", "IsMetric")
+    auto_units = BigParamControl("set units from location", "IQAutoUnits", toggle_callback=self._auto_units_callback)
 
-    self._scroller.add_widgets([disengage, ldw, is_metric])
+    self._scroller.add_widgets([disengage, ldw, is_metric, auto_units])
 
     self._refresh_toggles = (
       ("DisengageOnAccelerator", disengage),
       ("IsLdwEnabled", ldw),
       ("IsMetric", is_metric),
+      ("IQAutoUnits", auto_units),
     )
 
     if ui_state.params.get_bool("ShowDebugInfo"):
@@ -34,6 +36,10 @@ class TogglesLayoutMici(NavScroller):
   def show_event(self):
     super().show_event()
     self._update_toggles()
+
+  def _auto_units_callback(self, state: bool):
+    if state:
+      ui_state.params.remove("IQAutoUnitsRegion")
 
   def _update_toggles(self):
     ui_state.update_params()

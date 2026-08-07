@@ -1,10 +1,13 @@
+import re
+from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum, IntFlag
+from functools import cache
 from iqdbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, CarSpecs, DbcDict, PlatformConfig, Platforms
 from iqdbc.car.lateral import AngleSteeringLimits, ISO_LATERAL_ACCEL
 from iqdbc.car.structs import CarParams, CarState
 from iqdbc.car.docs_definitions import CarDocs, CarFootnote, CarHarness, CarParts, Column, SupportType
-from iqdbc.car.fw_query_definitions import FwQueryConfig, Request, StdQueries
+from iqdbc.car.fw_query_definitions import FwQueryConfig, LiveFwVersions, OfflineFwVersions, Request, StdQueries
 
 Ecu = CarParams.Ecu
 
@@ -69,16 +72,6 @@ class CAR(Platforms):
   )
 
 
-FW_QUERY_CONFIG = FwQueryConfig(
-  requests=[
-    Request(
-      [StdQueries.TESTER_PRESENT_REQUEST, StdQueries.SUPPLIER_SOFTWARE_VERSION_REQUEST],
-      [StdQueries.TESTER_PRESENT_RESPONSE, StdQueries.SUPPLIER_SOFTWARE_VERSION_RESPONSE],
-      bus=0,
-    )
-  ]
-)
-
 # Cars with this EPS FW have a 2-bit DAS_steeringControlType and use TeslaFlags.LEGACY_DAS_STEERING
 LEGACY_DAS_STEERING_FW = {
   CAR.TESLA_MODEL_3: [
@@ -115,6 +108,99 @@ LEGACY_DAS_STEERING_FW = {
     b'TeM3_SP_XP002p2_0.0.0 (36),XPR003.10.0',
   ],
 }
+
+# e.g. TeMYG4_Main_0.0.0 (87),Y4003.09.3
+#      11111_22222_______33____45__666666
+# 1 = EPS firmware program, 2 = build lineage, 3 = build number, 4 = model code,
+# 5 = trim/hardware variant, 6 = series and software version
+#
+# Only the model code identifies the vehicle: 1 and 2 are shared across models (Model 3 and
+# Model Y both ship TeM3_ and TeMYG4_ firmware) and 3 is only monotone within one lineage.
+FW_PATTERN = re.compile(rb'^Te[A-Z0-9]+_[A-Za-z0-9_]+_0\.0\.0 \(\d+\),' +
+                        rb'(?P<model>E4|E|Y4|Y|XP)[A-Z]{0,2}(?P<series>\d{3})\.(?P<version>\d+(?:\.\d+)*)$')
+
+
+def get_platform_codes(fw_versions: list[bytes] | set[bytes]) -> set[tuple[bytes, bytes, tuple[int, ...]]]:
+  codes = set()
+  for fw in fw_versions:
+    match = FW_PATTERN.match(fw)
+    if match is not None:
+      codes.add((match.group('model'), match.group('series'),
+                 tuple(int(v) for v in match.group('version').split(b'.'))))
+
+  return codes
+
+
+@cache
+def _das_steering_cutoffs() -> dict[tuple[str, bytes, bytes], tuple[tuple[int, ...] | None, tuple[int, ...] | None]]:
+  """Per (platform, model code, series) family, the oldest known modern version and the newest
+  known legacy version. Tesla only ever moves a family forward, so these bound the split."""
+  # imported here because fingerprints.py imports this module
+  from iqdbc.car.tesla.fingerprints import FW_VERSIONS
+
+  legacy: defaultdict[tuple, set] = defaultdict(set)
+  modern: defaultdict[tuple, set] = defaultdict(set)
+  for platform, ecus in FW_VERSIONS.items():
+    known_legacy = LEGACY_DAS_STEERING_FW.get(platform, [])
+    for fws in ecus.values():
+      for fw in fws:
+        for model, series, version in get_platform_codes([fw]):
+          (legacy if fw in known_legacy else modern)[(platform, model, series)].add(version)
+
+  return {k: (min(modern[k]) if k in modern else None, max(legacy[k]) if k in legacy else None)
+          for k in set(legacy) | set(modern)}
+
+
+def is_legacy_das_steering(candidate: str, fw: bytes) -> bool:
+  """Whether an EPS FW uses the 2-bit DAS_steeringControlType. Unknown firmware newer than
+  anything in a family is treated as modern: cars only move forward, and someone left behind
+  on legacy software can force the platform with CarPlatformBundle."""
+  if fw in LEGACY_DAS_STEERING_FW.get(candidate, []):
+    return True
+
+  codes = get_platform_codes([fw])
+  if not len(codes):
+    return False
+
+  model, series, version = next(iter(codes))
+  first_modern, last_legacy = _das_steering_cutoffs().get((candidate, model, series), (None, None))
+  if first_modern is not None:
+    return version < first_modern
+
+  return last_legacy is not None and version <= last_legacy
+
+
+def match_fw_to_car_fuzzy(live_fw_versions: LiveFwVersions, vin: str, offline_fw_versions: OfflineFwVersions) -> set[str]:
+  # Tesla fingerprints on the EPS alone and Ecu.eps is in FUZZY_EXCLUDE_ECUS, so the generic fuzzy
+  # matcher can never match a Tesla. Match on the model code, which survives the EPS version bumps
+  # that ship with Tesla software updates. The series is deliberately not required to be known:
+  # Tesla bumps it within a platform (E4014 -> E4015, Y4002 -> Y4003).
+  offline_codes: defaultdict[bytes, set[str]] = defaultdict(set)
+  for candidate, ecus in offline_fw_versions.items():
+    for fws in ecus.values():
+      for model, _, _ in get_platform_codes(fws):
+        offline_codes[model].add(candidate)
+
+  candidates: set[str] = set()
+  for ecu, addr, sub_addr in {e for ecus in offline_fw_versions.values() for e in ecus}:
+    if ecu != Ecu.eps:
+      continue
+    for model, _, _ in get_platform_codes(live_fw_versions.get((addr, sub_addr), set())):
+      candidates |= offline_codes[model]
+
+  return candidates if len(candidates) == 1 else set()
+
+
+FW_QUERY_CONFIG = FwQueryConfig(
+  requests=[
+    Request(
+      [StdQueries.TESTER_PRESENT_REQUEST, StdQueries.SUPPLIER_SOFTWARE_VERSION_REQUEST],
+      [StdQueries.TESTER_PRESENT_RESPONSE, StdQueries.SUPPLIER_SOFTWARE_VERSION_RESPONSE],
+      bus=0,
+    )
+  ],
+  match_fw_to_car_fuzzy=match_fw_to_car_fuzzy,
+)
 
 
 class CANBUS:

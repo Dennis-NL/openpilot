@@ -18,15 +18,17 @@ class ReplayStream : public AbstractStream {
 public:
   ReplayStream(QObject *parent);
   void start() override { replay->start(); }
-  bool loadRoute(const QString &route, const QString &data_dir, uint32_t replay_flags = REPLAY_FLAG_NONE, bool auto_source = false);
+  bool loadRoute(const std::string &route, const std::string &data_dir, uint32_t replay_flags = REPLAY_FLAG_NONE, bool auto_source = false);
   bool eventFilter(const Event *event);
   void seekTo(double ts) override { replay->seekTo(std::max(double(0), ts), false); }
   bool liveStreaming() const override { return false; }
-  inline QString routeName() const override { return QString::fromStdString(replay->route().name()); }
-  inline QString carFingerprint() const override { return replay->carFingerprint().c_str(); }
+  inline std::string routeName() const override { return replay->route().name(); }
+  inline std::string carFingerprint() const override { return replay->carFingerprint(); }
   double minSeconds() const override { return replay->minSeconds(); }
   double maxSeconds() const { return replay->maxSeconds(); }
-  inline QDateTime beginDateTime() const { return QDateTime::fromSecsSinceEpoch(replay->routeDateTime()); }
+  inline std::chrono::system_clock::time_point beginDateTime() const override {
+    return std::chrono::system_clock::from_time_t(replay->routeDateTime());
+  }
   inline uint64_t beginMonoTime() const override { return replay->routeStartNanos(); }
   inline void setSpeed(float speed) override { replay->setSpeed(speed); }
   inline float getSpeed() const { return replay->getSpeed(); }

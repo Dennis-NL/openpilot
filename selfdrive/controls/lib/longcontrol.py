@@ -53,7 +53,7 @@ class LongControl:
   def reset(self):
     self.pid.reset()
 
-  def update(self, active, CS, a_target, should_stop, accel_limits, lead_distance=0.0, has_lead=False):
+  def update(self, active, CS, a_target, should_stop, accel_limits, lead_distance=0.0, has_lead=False, gas_override=False):
     """Update longitudinal control. This updates the state machine and runs a PID loop"""
     self.pid.neg_limit = accel_limits[0]
     self.pid.pos_limit = accel_limits[1]
@@ -87,8 +87,13 @@ class LongControl:
       else:
         error = a_target - CS.aEgo
         output_accel = self.pid.update(error, speed=CS.vEgo,
-                                       feedforward=a_target)
+                                       feedforward=a_target,
+                                       freeze_integrator=gas_override)
         self.smooth.reset()
+
+    if gas_override:
+      # safety blocks braking while the gas is pressed, and a blocked tx drops the whole frame
+      output_accel = max(output_accel, 0.0)
 
     self.last_output_accel = np.clip(output_accel, accel_limits[0], accel_limits[1])
     return self.last_output_accel

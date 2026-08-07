@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import numpy as np
 import os
+import time
 from functools import cache
 import threading
 
@@ -136,10 +137,18 @@ class Mic:
     self.last_device = f"{device}: {sd.query_devices(device)['name']}" if isinstance(device, int) else str(device)
     cloudlog.info(f"micd selecting input device {self.last_device}")
 
-    with self.get_stream(sd) as stream:
-      cloudlog.info(f"micd stream started: {stream.samplerate=} {stream.channels=} {stream.dtype=} {stream.device=}, {stream.blocksize=}")
-      while True:
-        self.update()
+    while True:
+      try:
+        with self.get_stream(sd) as stream:
+          cloudlog.info(f"micd stream started: {stream.samplerate=} {stream.channels=} {stream.dtype=} {stream.device=}, {stream.blocksize=}")
+          while True:
+            self.update()
+      except Exception:
+        # Some A1s wedge the audio DSP (ALSA EINVAL / ADSP_EFAILED until reboot). Dying here
+        # crash-loops the process and selfdrived raises a takeover alert mid-drive over a
+        # microphone - stay alive and keep retrying instead; recovers if the DSP comes back.
+        cloudlog.exception("micd: audio stream unavailable, retrying")
+        time.sleep(10)
 
 
 def main():

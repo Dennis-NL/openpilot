@@ -17,6 +17,10 @@ from openpilot.common.basedir import BASEDIR
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
 
+MAX_CRASH_BACKOFF = 300.0
+CRASH_RESET_TIME = 60.0
+CRASH_LOOP_THRESHOLD = 6
+
 try:
   from openpilot.system.proprietary_runtime.runtime_paths import preferred_runner_path
 except ModuleNotFoundError:
@@ -82,6 +86,10 @@ class ManagerProcess(ABC):
   name = ""
   shutting_down = False
   restart_if_crash = False
+  crash_count = 0
+  last_restart_time = 0.0
+  last_alive_time = 0.0
+  crash_loop_logged = False
 
   @abstractmethod
   def prepare(self) -> None:
@@ -318,13 +326,33 @@ def ensure_running(procs: ValuesView[ManagerProcess], started: bool, params=None
     not_run = []
 
   running = []
+  now = time.monotonic()
   for p in procs:
     if p.enabled and p.name not in not_run and p.should_run(started, params, CP):
-      if p.restart_if_crash and p.proc is not None and not p.proc.is_alive():
-        cloudlog.error(f'Restarting {p.name} (exitcode {p.proc.exitcode})')
-        p.restart()
+      if p.restart_if_crash and p.proc is not None and p.proc.is_alive():
+        p.last_alive_time = now
+      elif p.restart_if_crash and p.proc is not None:
+        # uptime, not time-since-restart: the latter also counts the backoff wait,
+        # which would reset the counter as soon as backoff exceeds CRASH_RESET_TIME
+        if p.last_alive_time - p.last_restart_time > CRASH_RESET_TIME:
+          p.crash_count = 0
+          p.crash_loop_logged = False
+
+        backoff = 0.0 if not p.crash_count else min(MAX_CRASH_BACKOFF, 2.0 ** (p.crash_count - 1))
+        if now - p.last_restart_time >= backoff:
+          p.crash_count += 1
+          p.last_restart_time = now
+          cloudlog.error(f'Restarting {p.name} (exitcode {p.proc.exitcode}) [crash {p.crash_count}]')
+          if p.crash_count >= CRASH_LOOP_THRESHOLD and not p.crash_loop_logged:
+            # never stop retrying: giving up on hardwared or ui is worse than restarting slowly
+            cloudlog.error(f'{p.name} is in a crash loop, backing off to {MAX_CRASH_BACKOFF}s between restarts')
+            p.crash_loop_logged = True
+          p.restart()
       running.append(p)
     else:
+      p.crash_count = 0
+      p.crash_loop_logged = False
+      p.last_alive_time = 0.0
       p.stop(block=False)
 
   for p in running:

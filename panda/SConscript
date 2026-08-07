@@ -93,7 +93,9 @@ def build_project(project_name, project, main, extra_flags):
   )
 
   # short colored build output shared with the top-level build (if present)
-  _pretty = Dir('#site_scons/site_tools').File('pretty.py')
+  _pretty = Dir('#tools/scons/site_tools').File('pretty.py')
+  if not _pretty.exists():
+    _pretty = Dir('#site_scons/site_tools').File('pretty.py')
   if _pretty.exists():
     env.Tool('pretty', toolpath=[_pretty.dir.abspath])
   if not hasattr(env, 'PrettyAction'):

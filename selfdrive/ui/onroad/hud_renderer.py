@@ -32,6 +32,7 @@ class FontSizes:
   max_speed: int = 28
   set_speed: int = 74
   limit_speed: int = 64
+  limit_offset: int = 30
   limit_unit: int = 22
   limit_label: int = 24
 
@@ -70,6 +71,7 @@ class HudRenderer(Widget):
     self.speed: float = 0.0
     self.v_ego_cluster_seen: bool = False
     self.limit_speed_text: str = "---"
+    self.limit_offset_text: str = ""
     self.limit_available: bool = False
 
     self._font_semi_bold: rl.Font = gui_app.font(FontWeight.SEMI_BOLD)
@@ -168,14 +170,28 @@ class HudRenderer(Widget):
     else:
       limit_value_size = 48
     limit_value_width = measure_text_cached(self._font_bold, limit_value_text, limit_value_size).x
+    limit_offset_text = self.limit_offset_text if self.limit_available else ""
+    limit_offset_width = 0.0
+    if limit_offset_text:
+      limit_offset_width = measure_text_cached(self._font_semi_bold, limit_offset_text, FONT_SIZES.limit_offset).x + 8
+    limit_value_x = x + (set_speed_width - limit_value_width - limit_offset_width) / 2
     rl.draw_text_ex(
       self._font_bold,
       limit_value_text,
-      rl.Vector2(x + (set_speed_width - limit_value_width) / 2, y + 14),
+      rl.Vector2(limit_value_x, y + 14),
       limit_value_size,
       0,
       limit_value_color,
     )
+    if limit_offset_text:
+      rl.draw_text_ex(
+        self._font_semi_bold,
+        limit_offset_text,
+        rl.Vector2(limit_value_x + limit_value_width + 8, y + 22),
+        FONT_SIZES.limit_offset,
+        0,
+        COLORS.WHITE_TRANSLUCENT,
+      )
 
     if self.limit_available:
       limit_unit_text = tr("LIMIT")

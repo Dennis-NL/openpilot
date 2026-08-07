@@ -3,7 +3,7 @@
 import math
 import numpy as np
 
-from cereal import messaging, car
+from cereal import messaging, car, custom
 from iqdbc.car.vehicle_model import VehicleModel
 from openpilot.common.realtime import DT_CTRL, Ratekeeper
 from openpilot.common.params import Params
@@ -35,6 +35,7 @@ def joystickd_thread():
   params = Params()
   cloudlog.info("joystickd is waiting for CarParams")
   CP = messaging.log_from_bytes(params.get("CarParams", block=True), car.CarParams)
+  CP_IQ = messaging.log_from_bytes(params.get("IQCarParams", block=True), custom.IQCarParams)
   VM = VehicleModel(CP)
 
   sm = messaging.SubMaster(['carState', 'onroadEvents', 'liveParameters', 'selfdriveState', 'iqState', 'testJoystick'], frequency=1. / DT_CTRL)
@@ -64,7 +65,9 @@ def joystickd_thread():
 
     CC.enabled = bool(ss.enabled or aol_enabled)
     CC.latActive = bool(ss.active or joystick_angle_lat_active) and not sm['carState'].steerFaultTemporary and not sm['carState'].steerFaultPermanent
-    CC.longActive = bool(ss.enabled) and not any(e.overrideLongitudinal for e in sm['onroadEvents']) and CP.openpilotLongitudinalControl
+    long_through_override = CP_IQ.longActiveWithGasOverride and CP.openpilotLongitudinalControl
+    override_longitudinal = any(e.overrideLongitudinal for e in sm['onroadEvents'])
+    CC.longActive = bool(ss.enabled) and (not override_longitudinal or long_through_override) and CP.openpilotLongitudinalControl
     CC.cruiseControl.cancel = sm['carState'].cruiseState.enabled and (not CC.enabled or not CP.pcmCruise)
     CC.hudControl.leadDistanceBars = 2
 

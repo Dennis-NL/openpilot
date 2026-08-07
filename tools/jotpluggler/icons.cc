@@ -6,7 +6,7 @@
 void icon_add_font(float size, bool merge, const ImFont *base_font) {
   // IQ.Pilot patch: iqpilot's third_party/bootstrap is git-lfs and the TTF isn't
   // checked in, so we vendor the font alongside jotpluggler instead of relying on
-  // third_party/bootstrap/bootstrap-icons.ttf.
+  // upstream's BOOTSTRAP_ICONS_TTF define from the comma-deps-bootstrap-icons wheel.
   const std::filesystem::path ttf = repo_root() / "tools" / "jotpluggler" / "assets" / "bootstrap-icons.ttf";
   ImGuiIO &io = ImGui::GetIO();
   ImFontConfig config;

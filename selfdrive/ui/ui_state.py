@@ -8,6 +8,7 @@ from cereal import messaging, car, log, custom
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
+from openpilot.iqpilot.common.auto_units import AutoUnits
 from openpilot.selfdrive.ui.lib.prime_state import PrimeState
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.hardware import HARDWARE, PC
@@ -42,12 +43,13 @@ class IQUIState:
 
     self.update_params()
 
+    self.auto_units = AutoUnits(self.params)
     self.onroad_brightness_timer: int = 0
     self.custom_interactive_timeout: int = self.params.get("InteractivityTimeout", return_default=True)
     self.reset_onroad_sleep_timer()
 
   def update(self) -> None:
-    pass
+    self.auto_units.update()
 
   def onroad_brightness_handle_alerts(self, started: bool, alert):
     # while an alert is on screen the dim countdown is frozen and re-armed; otherwise it ticks down
@@ -254,6 +256,7 @@ class UIState(IQUIState):
         "radarState",
         "liveTracks",
         "iqVehicleTracks",
+        "iqEnvironment",
         "deviceState",
         "pandaStates",
         "carParams",

@@ -2,7 +2,7 @@ from iqdbc.car import Bus, get_safety_config, structs
 from iqdbc.car.interfaces import CarInterfaceBase
 from iqdbc.car.tesla.carcontroller import CarController
 from iqdbc.car.tesla.carstate import CarState
-from iqdbc.car.tesla.values import TeslaSafetyFlags, TeslaFlags, CANBUS, CAR, DBC, LEGACY_DAS_STEERING_FW, Ecu
+from iqdbc.car.tesla.values import TeslaSafetyFlags, TeslaFlags, CANBUS, CAR, DBC, Ecu, is_legacy_das_steering
 from iqdbc.car.tesla.radar_interface import RadarInterface, RADAR_START_ADDR
 
 from iqdbc.lvbs.car.tesla.values import TeslaFlagsIQ, TeslaSafetyFlagsIQ
@@ -41,7 +41,7 @@ class CarInterface(CarInterfaceBase):
       ret.openpilotLongitudinalControl = True
       ret.safetyConfigs[0].safetyParam |= TeslaSafetyFlags.LONG_CONTROL.value
 
-    legacy_das = any(fw.ecu == Ecu.eps and fw.fwVersion in LEGACY_DAS_STEERING_FW.get(candidate, []) for fw in car_fw)
+    legacy_das = any(fw.ecu == Ecu.eps and is_legacy_das_steering(candidate, fw.fwVersion) for fw in car_fw)
     if legacy_das:
       ret.flags |= TeslaFlags.LEGACY_DAS_STEERING.value
       ret.safetyConfigs[0].safetyParam |= TeslaSafetyFlags.LEGACY_DAS_STEERING.value

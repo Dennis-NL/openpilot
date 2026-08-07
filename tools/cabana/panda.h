@@ -48,12 +48,11 @@ struct can_frame {
 
 class Panda {
 public:
-  Panda(std::string serial="", uint32_t bus_offset=0, bool passive_mode=false);
+  Panda(std::string serial="", uint32_t bus_offset=0);
   ~Panda();
 
   cereal::PandaState::PandaType hw_type = cereal::PandaState::PandaType::UNKNOWN;
   const uint32_t bus_offset;
-  const bool passive_mode;
 
   bool connected();
   bool comms_healthy();

@@ -333,6 +333,7 @@ struct IQCarParams @0xd4189b5c8aca9f78 {
   iqLateralNet @4 :LateralNet;
   longitudinalStoppingSpeedOverride @5 :Float32;  # m/s; zero keeps the upstream default
   stoppingDecelRateOverride @6 :Float32;          # m/s^3; zero keeps the upstream default
+  longActiveWithGasOverride @7 :Bool;             # keep long control active while the driver is on the gas
 
   struct LateralNet {
     fuzzyFingerprint @0 :Bool;
@@ -762,7 +763,33 @@ struct IQVehicleTracks @0xb877ef4b20a4ae22 {
   }
 }
 
-struct CustomReserved13 @0xfd960244a79e2804 {
+struct IQEnvironment @0xfd960244a79e2804 {
+  frameId @0 :UInt32;
+  offloaded @1 :Bool;
+  modelValid @2 :Bool;
+  objects @3 :List(Object);
+
+  struct Object {
+    x @0 :Float32;
+    y @1 :Float32;
+    z @2 :Float32;
+    width @3 :Float32;
+    height @4 :Float32;
+    length @5 :Float32;
+    prob @6 :Float32;
+    label @7 :Label;
+
+    enum Label {
+      car @0;
+      motorcycle @1;
+      bus @2;
+      truck @3;
+      person @4;
+      bicycle @5;
+      stopSign @6;
+      trafficLight @7;
+    }
+  }
 }
 
 struct CustomReserved14 @0xa6e5a1ce8ca5258e {

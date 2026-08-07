@@ -6,6 +6,7 @@ common_libs = [
   'util.cc',
   'ratekeeper.cc',
   'clutil.cc',
+  'yuv.cc',
 ]
 
 _common = env.Library('common', common_libs, LIBS="json11")

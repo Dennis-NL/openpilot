@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 import json
-
 from iqdbc.car import Bus
 from iqdbc.car.fingerprints import MIGRATION
 from iqdbc.car.values import PLATFORMS

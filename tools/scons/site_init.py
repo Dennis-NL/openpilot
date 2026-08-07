@@ -19,8 +19,10 @@ _GREEN = "\033[38;5;114m"
 _RED = "\033[38;5;203m"
 _RST = "\033[0m"
 
+_READING = "scons: Reading SConscript files ..."
+
 _PHASES = {
-  "scons: Reading SConscript files ...":                          f"{_DIM}reading sconscripts…{_RST}",
+  _READING:                                                       f"{_DIM}reading sconscripts…{_RST}",
   "scons: done reading SConscript files.":                        f"{_DIM}sconscripts read{_RST}",
   "scons: Building targets ...":                                  f"{_BLUE}building…{_RST}",
   "scons: done building targets.":                                f"{_GREEN}✓ build complete{_RST}",
@@ -64,6 +66,15 @@ if not isinstance(_main.progress_display, _Restyle):
   _main.progress_display = _Restyle(_main.progress_display, _phase)
 if not isinstance(_main.display, _Restyle):
   _main.display = _Restyle(_main.display, _clean)
+
+
+# SConstruct imports this instead of scons auto-loading a root site_scons dir, so the reading
+# banner is already on screen by now; rewrite that one line in place
+if not getattr(_main, "_iq_banner_restyled", False):
+  _main._iq_banner_restyled = True
+  if _tty() and _main.progress_display.print_it:
+    sys.stdout.write(f"\033[F\033[2K{_PHASES[_READING]}\n")
+    sys.stdout.flush()
 
 
 # drop only "Could not remove ... No such file" during clean; real errors still print

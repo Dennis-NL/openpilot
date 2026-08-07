@@ -17,7 +17,7 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.common.swaglog import cloudlog
 from openpilot.iqpilot.common.k3_slc_log import k3_slc_log
 from openpilot.iqpilot.common.slc_utilities import calculate_bearing_offset, is_url_pingable
-from openpilot.iqpilot.common.slc_variables import FREE_MAPBOX_REQUESTS, OFFSET_MAP_IMPERIAL, OFFSET_MAP_METRIC
+from openpilot.iqpilot.common.slc_variables import FREE_MAPBOX_REQUESTS, OFFSET_MAP_IMPERIAL, OFFSET_MAP_METRIC, OFFSET_PERCENT_MAX
 
 try:
   import requests
@@ -354,6 +354,8 @@ class SpeedLimitController:
         pass
 
     self.executor = ThreadPoolExecutor(max_workers=1)
+    self._offset_cache = {}
+    self._offset_cache_t = 0.0
     self._last_mapbox_log_t = 0.0
     self._last_mapbox_diag_t = 0.0
     self._last_mapbox_diag_message = None
@@ -416,16 +418,32 @@ class SpeedLimitController:
     return self._assist.output_a_target
 
   def get_offset(self, is_metric):
+    target = self._assist.target
+    # offsets only apply to real limit sources: fallback set-speed publishes "None",
+    # construction clamps must never be inflated
+    if target <= 0 or self._assist.source in ("None", "Construction"):
+      return 0.0
     offset_map = OFFSET_MAP_METRIC if is_metric else OFFSET_MAP_IMPERIAL
     for low, high, offset_param in offset_map:
-      if low < self._assist.target < high:
-        offset_value = self.params.get(offset_param)
-        if offset_value is not None:
-          if isinstance(offset_value, bytes):
-            return float(offset_value.decode("utf-8"))
-          return float(offset_value)
-        return 0.0
+      if low <= target < high:
+        percent = float(np.clip(self._get_offset_percent(offset_param), -OFFSET_PERCENT_MAX, OFFSET_PERCENT_MAX))
+        return target * percent / 100.0
     return 0.0
+
+  def _get_offset_percent(self, offset_param):
+    now_mono = time.monotonic()
+    if now_mono - self._offset_cache_t >= 5.0:
+      self._offset_cache.clear()
+      self._offset_cache_t = now_mono
+    if offset_param not in self._offset_cache:
+      offset_value = self.params.get(offset_param)
+      try:
+        if isinstance(offset_value, bytes):
+          offset_value = offset_value.decode("utf-8")
+        self._offset_cache[offset_param] = float(offset_value) if offset_value is not None else 0.0
+      except (ValueError, TypeError):
+        self._offset_cache[offset_param] = 0.0
+    return self._offset_cache[offset_param]
 
   @staticmethod
   def _is_alive(sm, key):

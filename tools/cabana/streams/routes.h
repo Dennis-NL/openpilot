@@ -1,11 +1,12 @@
 #pragma once
 
+#include <atomic>
+#include <memory>
+
 #include <QComboBox>
 #include <QDialog>
-#include "tools/cabana/utils/api.h"
 
 class RouteListWidget;
-class OneShotHttpRequest;
 
 class RoutesDialog : public QDialog {
   Q_OBJECT
@@ -14,12 +15,14 @@ public:
   QString route();
 
 protected:
-  void parseDeviceList(const QString &json, bool success, QNetworkReply::NetworkError err);
-  void parseRouteList(const QString &json, bool success, QNetworkReply::NetworkError err);
+  void parseDeviceList(const QString &json, bool success, int error_code);
+  void parseRouteList(const QString &json, bool success, int error_code);
   void fetchRoutes();
 
   QComboBox *device_list_;
   QComboBox *period_selector_;
   RouteListWidget *route_list_;
-  OneShotHttpRequest *route_requester_;
+  std::atomic<int> fetch_id_{0};
+  // expires on destruction; guards main-thread callbacks from detached worker threads
+  std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
 };

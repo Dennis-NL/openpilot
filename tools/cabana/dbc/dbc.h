@@ -1,57 +1,21 @@
 #pragma once
 
+#include <cstdio>
+#include <cstdlib>
+#include <functional>
 #include <limits>
+#include <string>
 #include <utility>
 #include <vector>
 
-#include <QColor>
-#include <QMetaType>
-#include <QString>
+#include "tools/cabana/core/color.h"
+#include "tools/cabana/core/message_id.h"
 
-const QString UNTITLED = "untitled";
-const QString DEFAULT_NODE_NAME = "XXX";
+const std::string UNTITLED = "untitled";
+const std::string DEFAULT_NODE_NAME = "XXX";
 constexpr int CAN_MAX_DATA_BYTES = 64;
 
-struct MessageId {
-  uint8_t source = 0;
-  uint32_t address = 0;
-
-  QString toString() const {
-    return QString("%1:%2").arg(source).arg(QString::number(address, 16).toUpper());
-  }
-
-  inline static MessageId fromString(const QString &str) {
-    auto parts = str.split(':');
-    if (parts.size() != 2) return {};
-    return MessageId{.source = uint8_t(parts[0].toUInt()), .address = parts[1].toUInt(nullptr, 16)};
-  }
-
-  bool operator==(const MessageId &other) const {
-    return source == other.source && address == other.address;
-  }
-
-  bool operator!=(const MessageId &other) const {
-    return !(*this == other);
-  }
-
-  bool operator<(const MessageId &other) const {
-    return std::tie(source, address) < std::tie(other.source, other.address);
-  }
-
-  bool operator>(const MessageId &other) const {
-    return std::tie(source, address) > std::tie(other.source, other.address);
-  }
-};
-
-uint qHash(const MessageId &item);
-Q_DECLARE_METATYPE(MessageId);
-
-template <>
-struct std::hash<MessageId> {
-  std::size_t operator()(const MessageId &k) const noexcept { return qHash(k); }
-};
-
-typedef std::vector<std::pair<double, QString>> ValueDescription;
+typedef std::vector<std::pair<double, std::string>> ValueDescription;
 
 namespace cabana {
 
@@ -61,7 +25,7 @@ public:
   Signal(const Signal &other) = default;
   void update();
   bool getValue(const uint8_t *data, size_t data_size, double *val) const;
-  QString formatValue(double value, bool with_unit = true) const;
+  std::string formatValue(double value, bool with_unit = true) const;
   bool operator==(const cabana::Signal &other) const;
   inline bool operator!=(const cabana::Signal &other) const { return !(*this == other); }
 
@@ -72,19 +36,19 @@ public:
   };
 
   Type type = Type::Normal;
-  QString name;
+  std::string name;
   int start_bit, msb, lsb, size;
   double factor = 1.0;
   double offset = 0;
   bool is_signed;
   bool is_little_endian;
   double min, max;
-  QString unit;
-  QString comment;
-  QString receiver_name;
+  std::string unit;
+  std::string comment;
+  std::string receiver_name;
   ValueDescription val_desc;
   int precision = 0;
-  QColor color;
+  CabanaColor color;
 
   // Multiplexed
   int multiplex_value = 0;
@@ -97,20 +61,20 @@ public:
   Msg(const Msg &other) { *this = other; }
   ~Msg();
   cabana::Signal *addSignal(const cabana::Signal &sig);
-  cabana::Signal *updateSignal(const QString &sig_name, const cabana::Signal &sig);
-  void removeSignal(const QString &sig_name);
+  cabana::Signal *updateSignal(const std::string &sig_name, const cabana::Signal &sig);
+  void removeSignal(const std::string &sig_name);
   Msg &operator=(const Msg &other);
   int indexOf(const cabana::Signal *sig) const;
-  cabana::Signal *sig(const QString &sig_name) const;
-  QString newSignalName();
+  cabana::Signal *sig(const std::string &sig_name) const;
+  std::string newSignalName();
   void update();
   inline const std::vector<cabana::Signal *> &getSignals() const { return sigs; }
 
   uint32_t address;
-  QString name;
+  std::string name;
   uint32_t size;
-  QString comment;
-  QString transmitter;
+  std::string comment;
+  std::string transmitter;
   std::vector<cabana::Signal *> sigs;
 
   std::vector<uint8_t> mask;
@@ -123,4 +87,8 @@ public:
 double get_raw_value(const uint8_t *data, size_t data_size, const cabana::Signal &sig);
 void updateMsbLsb(cabana::Signal &s);
 inline int flipBitPos(int start_bit) { return 8 * (start_bit / 8) + 7 - start_bit % 8; }
-inline QString doubleToString(double value) { return QString::number(value, 'g', std::numeric_limits<double>::digits10); }
+inline std::string doubleToString(double value) {
+  char buf[64];
+  snprintf(buf, sizeof(buf), "%.*g", std::numeric_limits<double>::digits10, value);
+  return buf;
+}

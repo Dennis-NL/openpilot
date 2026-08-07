@@ -17,12 +17,14 @@ from iqdbc.car.fingerprints import MIGRATION
 from iqdbc.car.values import PLATFORMS
 from openpilot.common.basedir import BASEDIR
 
-Import('env', 'arch', 'common', 'messaging', 'visionipc', 'cereal', 'replay_lib')
+Import('env', 'arch', 'common', 'messaging', 'visionipc', 'cereal', 'replay_lib', 'ffmpeg_libs')
 
 jot_env = env.Clone()
 # imgui.MESA_DIR only exists on the larch64 wheel; skip missing paths to avoid an ld search-path warning
 jot_env["LIBPATH"] += [p for p in [imgui.MESA_DIR, libusb.LIB_DIR] if os.path.isdir(p)]
 jot_env["CPPPATH"] += [imgui.INCLUDE_DIR, libusb.INCLUDE_DIR]
+# IQ.Pilot patch: no comma-deps-bootstrap-icons wheel here, so BOOTSTRAP_ICONS_TTF is
+# not defined; icons.cc reads the TTF vendored under tools/jotpluggler/assets instead.
 jot_env["CXXFLAGS"] += [
   "-DGLFW_INCLUDE_NONE",
   '-DJOTP_REPO_ROOT=\'"%s"\'' % os.path.realpath(BASEDIR),
@@ -104,16 +106,15 @@ event_extractors = jot_env.Command("generated_event_extractors.h", [
   jot_env.PrettyAction(generate_event_extractors, 'GEN'),
 )
 
-libs = [replay_lib, common, messaging, visionipc, cereal, File(f"{imgui.LIB_DIR}/libimgui.a"), File(f"{imgui.LIB_DIR}/libglfw3.a"),
-        # IQ.Pilot patch: iqpilot's replay_lib resolves URL/api work via libcurl
-        # (vs upstream's Python downloader), so jotpluggler needs to link curl too.
-        # iqpilot's api.cc additionally uses OpenSSL primitives (PEM/RSA/SHA256) for
-        # JWT signing, and visionipc references OpenCL — both must also be linked.
-        "avformat", "avcodec", "avutil", "x264", "yuv", "z", "bz2", "zstd", "curl", "ssl", "crypto", "m", "pthread", "usb-1.0"]
+# IQ.Pilot patch: iqpilot's replay_lib resolves route/API work via libcurl (vs upstream's
+# Python downloader), so jotpluggler needs curl; api.cc signs konn3kt JWTs with OpenSSL
+# primitives, and visionipc references OpenCL. Both must also be linked.
+libs = [replay_lib, common, messaging, visionipc, cereal, File(f"{imgui.LIB_DIR}/libimgui.a"), File(f"{imgui.LIB_DIR}/libglfw3.a")] + \
+        ffmpeg_libs + ["bz2", "zstd", "curl", "ssl", "crypto", "m", "pthread", "usb-1.0"]
 if arch == "Darwin":
   jot_env["FRAMEWORKS"] = ["OpenGL", "OpenCL", "Cocoa", "IOKit", "CoreFoundation", "CoreVideo", "CoreMedia", "VideoToolbox"]
 else:
-  libs += ["GL", "OpenCL", "dl", "va", "va-drm", "drm"]
+  libs += ["GL", "OpenCL", "dl"]
 
 program = jot_env.Program("jotpluggler", jot_env.Glob("*.cc"), LIBS=libs)
 jot_env.Depends(program, generated_dbc_stamp)

@@ -4,27 +4,22 @@ EARTH_RADIUS = 6378137
 # Mapbox API limits
 FREE_MAPBOX_REQUESTS = 100_000
 
-# Speed limit offset maps for different unit systems
-# Each entry is (min_speed_ms, max_speed_ms, param_name)
+# Speed limit offset zones for different unit systems
+# Each entry is (min_speed_ms, max_speed_ms, param_name); the param value is a
+# percent offset applied to the resolved limit (e.g. 10 -> +10%), lower bound inclusive
+
+OFFSET_PERCENT_MAX = 50.0
 
 OFFSET_MAP_IMPERIAL = [
-  (0, 11.2, "speed_limit_offset1"),     # 0-24 mph
-  (11.2, 15.2, "speed_limit_offset2"),  # 25-34 mph
-  (15.2, 19.6, "speed_limit_offset3"),  # 35-44 mph
-  (19.6, 24.1, "speed_limit_offset4"),  # 45-54 mph
-  (24.1, 28.6, "speed_limit_offset5"),  # 55-64 mph
-  (28.6, 33.1, "speed_limit_offset6"),  # 65-74 mph
-  (33.1, 44.2, "speed_limit_offset7"),  # 75-99 mph
+  (0, 8.94, "speed_limit_offset1"),               # 0-20 mph
+  (8.94, 17.88, "speed_limit_offset2"),           # 20-40 mph
+  (17.88, float("inf"), "speed_limit_offset3"),   # 40+ mph
 ]
 
 OFFSET_MAP_METRIC = [
-  (0, 8.1, "speed_limit_offset1"),      # 0-29 km/h
-  (8.1, 13.6, "speed_limit_offset2"),   # 30-49 km/h
-  (13.6, 16.4, "speed_limit_offset3"),  # 50-59 km/h
-  (16.4, 21.9, "speed_limit_offset4"),  # 60-79 km/h
-  (21.9, 27.5, "speed_limit_offset5"),  # 80-99 km/h
-  (27.5, 33.1, "speed_limit_offset6"),  # 100-119 km/h
-  (33.1, 38.9, "speed_limit_offset7"),  # 120-140 km/h
+  (0, 8.33, "speed_limit_offset1"),               # 0-30 km/h
+  (8.33, 16.67, "speed_limit_offset2"),           # 30-60 km/h
+  (16.67, float("inf"), "speed_limit_offset3"),   # 60+ km/h
 ]
 
 # Speed limit filler constants

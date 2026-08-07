@@ -961,6 +961,10 @@ class WifiManager:
           settings['connection'] = {}
 
         changes = False
+        # NetworkManager updates an active modem connection in place. Quectel
+        # modems keep the existing PDP bearer in that case, so an APN change
+        # does not take effect until LTE is disconnected and reactivated.
+        apn_settings_changed = False
         auto_config = apn == ""
         initial_eps_apn = apn if not auto_config else ""
 
@@ -968,11 +972,13 @@ class WifiManager:
           cloudlog.warning(f'Changing gsm.auto-config to {auto_config}')
           settings['gsm']['auto-config'] = ('b', auto_config)
           changes = True
+          apn_settings_changed = True
 
         if settings['gsm'].get('apn', ('s', ''))[1] != apn:
           cloudlog.warning(f'Changing gsm.apn to {apn}')
           settings['gsm']['apn'] = ('s', apn)
           changes = True
+          apn_settings_changed = True
 
         if settings['gsm'].get('home-only', ('b', False))[1] == roaming:
           cloudlog.warning(f'Changing gsm.home-only to {not roaming}')
@@ -983,11 +989,13 @@ class WifiManager:
           cloudlog.warning(f'Changing gsm.initial-eps-bearer-configure to {bool(initial_eps_apn)}')
           settings['gsm']['initial-eps-bearer-configure'] = ('b', bool(initial_eps_apn))
           changes = True
+          apn_settings_changed = True
 
         if settings['gsm'].get('initial-eps-bearer-apn', ('s', ''))[1] != initial_eps_apn:
           cloudlog.warning(f'Changing gsm.initial-eps-bearer-apn to {initial_eps_apn}')
           settings['gsm']['initial-eps-bearer-apn'] = ('s', initial_eps_apn)
           changes = True
+          apn_settings_changed = True
 
         # Unknown means NetworkManager decides
         metered_int = int(MeteredType.UNKNOWN if metered else MeteredType.NO)
@@ -1005,7 +1013,10 @@ class WifiManager:
             cloudlog.warning(f"Failed to update GSM settings: {reply}")
             return
 
-          self._activate_modem_connection(lte_connection_path)
+          if apn_settings_changed:
+            self._restart_modem_connection(lte_connection_path)
+          else:
+            self._activate_modem_connection(lte_connection_path)
       except Exception as e:
         cloudlog.exception(f"Error updating GSM settings: {e}")
 
@@ -1033,6 +1044,40 @@ class WifiManager:
         self._router_main.send_and_get_reply(new_method_call(self._nm, 'ActivateConnection', 'ooo', (connection_path, modem_device, "/")))
     except Exception as e:
       cloudlog.exception(f"Error activating modem connection: {e}")
+
+  def _restart_modem_connection(self, connection_path: str):
+    """Reconnect LTE so a changed APN is used for a new PDP bearer."""
+    try:
+      for active_conn in self._get_active_connections():
+        conn_addr = DBusAddress(active_conn, bus_name=NM, interface=NM_ACTIVE_CONNECTION_IFACE)
+        active_conn_path = self._router_main.send_and_get_reply(Properties(conn_addr).get('Connection')).body[0][1]
+        if active_conn_path == connection_path:
+          cloudlog.warning("Restarting LTE connection to apply APN settings")
+          reply = self._router_main.send_and_get_reply(new_method_call(self._nm, 'DeactivateConnection', 'o', (active_conn,)))
+          if reply.header.message_type == MessageType.error:
+            cloudlog.warning(f"Failed to deactivate LTE connection: {reply}")
+            return
+
+          for _ in range(20):
+            if not self._is_connection_active(connection_path):
+              break
+            time.sleep(0.25)
+          else:
+            cloudlog.warning("LTE connection did not deactivate after APN change")
+            return
+          break
+
+      self._activate_modem_connection(connection_path)
+    except Exception as e:
+      cloudlog.exception(f"Error restarting modem connection: {e}")
+
+  def _is_connection_active(self, connection_path: str) -> bool:
+    for active_conn in self._get_active_connections():
+      conn_addr = DBusAddress(active_conn, bus_name=NM, interface=NM_ACTIVE_CONNECTION_IFACE)
+      active_conn_path = self._router_main.send_and_get_reply(Properties(conn_addr).get('Connection')).body[0][1]
+      if active_conn_path == connection_path:
+        return True
+    return False
 
   def stop(self):
     if not self._exit:

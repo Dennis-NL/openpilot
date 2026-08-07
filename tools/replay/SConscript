@@ -22,3 +22,4 @@ replay_env.Program("replay", ["main.cc"], LIBS=replay_libs, FRAMEWORKS=base_fram
 
 if GetOption('extras'):
   replay_env.Program('tests/test_replay', ['tests/test_replay.cc'], LIBS=replay_libs)
+  replay_env.Program('tests/test_api', ['tests/test_runner.cc', 'tests/test_api.cc'], LIBS=replay_libs)

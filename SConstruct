@@ -10,6 +10,13 @@ import SCons.Errors
 
 SCons.Warnings.warningAsException(True)
 
+# scons only auto-loads a site dir named site_scons at the repo root; ours lives under tools/,
+# so replicate what _load_site_scons_dir does (sys.path for site_tools imports + run site_init)
+SITE_DIR = Dir('#tools/scons').abspath
+if SITE_DIR not in sys.path:
+  sys.path.insert(0, SITE_DIR)
+import site_init  # noqa: F401
+
 # capnp's kj library warns when $PWD is stale (doesn't match the real cwd); keep them in sync
 os.environ.pop('PWD', None)
 
@@ -48,6 +55,13 @@ assert arch in [
   "x86_64",   # linux pc x64
   "Darwin",   # macOS arm64 (x86 not supported)
 ]
+
+# ffmpeg comes from the system (brew on macOS, distro packages elsewhere) rather than
+# a vendored wheel, so it always needs the static-link deps. Exported so tools/ can
+# take upstream's `ffmpeg_libs` form instead of hand-listing codecs per SConscript.
+ffmpeg_libs = ['avformat', 'avcodec', 'avutil', 'x264', 'z']
+if arch != "Darwin":
+  ffmpeg_libs += ['va', 'va-drm', 'drm']
 
 env = Environment(
   ENV={
@@ -100,7 +114,7 @@ env = Environment(
   COMPILATIONDB_USE_ABSPATH=True,
   REDNOSE_ROOT="#",
   tools=["default", "cython", "compilation_db", "rednose_filter"],
-  toolpath=["#site_scons/site_tools", "#rednose_repo/site_scons/site_tools"],
+  toolpath=["#tools/scons/site_tools", "#rednose_repo/site_scons/site_tools"],
 )
 
 # Arch-specific flags and paths
@@ -187,7 +201,7 @@ else:
 np_version = SCons.Script.Value(np.__version__)
 Export('envCython', 'np_version')
 
-Export('env', 'arch')
+Export('env', 'arch', 'ffmpeg_libs')
 
 # Setup cache dir
 default_cache_dir = os.environ.get('SCONS_CACHE_DIR') or ('/data/scons_cache' if arch == "larch64" else '/tmp/scons_cache')

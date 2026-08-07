@@ -28,8 +28,9 @@ inline constexpr std::array<CameraViewSpec, 4> kCameraViewSpecs = {{
   {CameraViewKind::QRoad,    "qRoad Camera",     "qroad",  "qroad",     "camera_qroad",     &RouteData::qroad_camera},
 }};
 
-inline constexpr std::array<SpecialItemSpec, 5> kSpecialItemSpecs = {{
+inline constexpr std::array<SpecialItemSpec, 6> kSpecialItemSpecs = {{
   {"map", "Map", PaneKind::Map, CameraViewKind::Road},
+  {"thumbnail", "Thumbnail", PaneKind::Thumbnail, CameraViewKind::Road},
   {kCameraViewSpecs[0].special_item_id, kCameraViewSpecs[0].label, PaneKind::Camera, kCameraViewSpecs[0].view},
   {kCameraViewSpecs[1].special_item_id, kCameraViewSpecs[1].label, PaneKind::Camera, kCameraViewSpecs[1].view},
   {kCameraViewSpecs[2].special_item_id, kCameraViewSpecs[2].label, PaneKind::Camera, kCameraViewSpecs[2].view},
@@ -62,6 +63,5 @@ bool app_begin_popup_modal(const char *name,
                            bool *p_open = nullptr,
                            ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize);
 void open_external_url(std::string_view url);
-std::string route_useradmin_url(const RouteIdentifier &route_id);
-std::string route_connect_url(const RouteIdentifier &route_id);
+std::string route_konn3kt_url(const RouteIdentifier &route_id);
 std::string route_google_maps_url(const GpsTrace &trace);

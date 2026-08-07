@@ -100,6 +100,7 @@ _services: dict[str, tuple] = {
   "iqLiveData": (True, 1., 1),
   "iqConstructionZone": (True, 2., 2),
   "iqVehicleTracks": (True, 4., 4),
+  "iqEnvironment": (True, 4., 4),
   "mapdOut": (True, 20., 20, QueueSize.MEDIUM),
   "mapdExtendedOut": (False, 1., -1, QueueSize.MEDIUM),
   "mapdIn": (False, 1., -1, QueueSize.MEDIUM),

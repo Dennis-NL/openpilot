@@ -176,3 +176,5 @@ selfdrive/ui/tests/test_ui/nav_demo_report/
 
 # fetcher: closed-source precompiled component — ship only the obfuscated .so
 /iqpilot/models_private_src/fetcher.py
+
+/tools/iqmacvisiond/macos/dist/

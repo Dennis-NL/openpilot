@@ -1,10 +1,109 @@
+from collections import defaultdict
+
+import pytest
+
 from iqdbc.car import gen_empty_fingerprint, structs
+from iqdbc.car.structs import CarParams
+from iqdbc.car.fw_versions import match_fw_to_car
+from iqdbc.car.tesla.fingerprints import FW_VERSIONS
 from iqdbc.car.tesla.interface import CarInterface
 from iqdbc.car.tesla.teslacan import TeslaCAN
 from iqdbc.car.tesla.radar_interface import RADAR_START_ADDR
 from iqdbc.car.tesla.carcontroller import CarController
-from iqdbc.car.tesla.values import CAR
+from iqdbc.car.tesla.values import (CAR, FW_PATTERN, LEGACY_DAS_STEERING_FW, TeslaFlags, TeslaSafetyFlags,
+                                    get_platform_codes, is_legacy_das_steering)
 from iqdbc.can import CANPacker, CANParser
+
+Ecu = CarParams.Ecu
+EPS_ADDR = 0x730
+
+
+def fw_match(fw: bytes):
+  car_fw = [CarParams.CarFw(ecu=Ecu.eps, fwVersion=fw, address=EPS_ADDR, subAddress=0, brand='tesla')]
+  exact, matches = match_fw_to_car(car_fw, '0' * 17, log=False)
+  return exact, matches
+
+
+class TestTeslaFwPattern:
+  def test_all_known_fw_parses(self):
+    for car, ecus in FW_VERSIONS.items():
+      for fws in ecus.values():
+        for fw in fws:
+          assert FW_PATTERN.match(fw) is not None, f'{car}: unparsed FW version: {fw}'
+
+  def test_model_code_identifies_one_platform(self):
+    # a new platform reusing an existing model code would silently misfingerprint
+    platforms = defaultdict(set)
+    for car, ecus in FW_VERSIONS.items():
+      for fws in ecus.values():
+        for model, _, _ in get_platform_codes(fws):
+          platforms[model].add(car)
+
+    for model, cars in platforms.items():
+      assert len(cars) == 1, f'model code {model} maps to multiple platforms: {cars}'
+
+  def test_exact_match_still_wins(self):
+    for car, ecus in FW_VERSIONS.items():
+      for fws in ecus.values():
+        for fw in fws:
+          exact, matches = fw_match(fw)
+          assert exact, f'{fw} fell back to fuzzy matching'
+          assert matches == {car}, f'{fw} matched {matches}, expected {car}'
+
+  @pytest.mark.parametrize("fw, expected", [
+    # a firmware bump within a known series, the case that used to fingerprint as MOCK
+    (b'TeMYG4_Main_0.0.0 (99),Y4003.14.0', CAR.TESLA_MODEL_Y),
+    (b'TeMYG4_Main_0.0.0 (99),E4H015.09.0', CAR.TESLA_MODEL_3),
+    (b'TeM3_SP_XP002p2_0.0.0 (40),XPR003.12.0', CAR.TESLA_MODEL_X),
+    # Tesla bumps the series within a platform (E4014 -> E4015, Y4002 -> Y4003)
+    (b'TeMYG4_Main_0.0.0 (12),Y4004.01.0', CAR.TESLA_MODEL_Y),
+    # an unknown model code is a car we don't support
+    (b'TeCT_Main_0.0.0 (1),CT001.01.0', None),
+    (b'garbage', None),
+  ])
+  def test_unknown_fw_fuzzy_match(self, fw, expected):
+    exact, matches = fw_match(fw)
+    if expected is None:
+      assert matches == set(), f'{fw} unexpectedly matched {matches}'
+    else:
+      assert not exact
+      assert matches == {expected}
+
+
+class TestTeslaLegacyDasSteering:
+  def test_reproduces_known_table(self):
+    for car, ecus in FW_VERSIONS.items():
+      for fws in ecus.values():
+        for fw in fws:
+          expected = fw in LEGACY_DAS_STEERING_FW.get(car, [])
+          assert is_legacy_das_steering(car, fw) == expected, f'{car}: wrong legacy DAS verdict for {fw}'
+
+  @pytest.mark.parametrize("car, fw, expected", [
+    # below a family's known modern cutoff (Y4/003 splits at 003.04.0)
+    (CAR.TESLA_MODEL_Y, b'TeMYG4_Legacy3Y_0.0.0 (5),Y4003.03.9', True),
+    (CAR.TESLA_MODEL_Y, b'TeMYG4_Main_0.0.0 (99),Y4003.14.0', False),
+    # E4/015 splits at 015.04.5
+    (CAR.TESLA_MODEL_3, b'TeMYG4_Main_0.0.0 (68),E4H015.03.9', True),
+    (CAR.TESLA_MODEL_3, b'TeMYG4_Main_0.0.0 (99),E4H015.09.0', False),
+    # families with no known modern FW: interpolate legacy, extrapolate modern
+    (CAR.TESLA_MODEL_3, b'TeM3_E014p10_0.0.0 (16),E014.18.00', True),
+    (CAR.TESLA_MODEL_3, b'TeM3_E014p10_0.0.0 (30),E014.22.0', False),
+    # numeric, not lexical, version compare (XPR003.10.0 > XPR003.6.0)
+    (CAR.TESLA_MODEL_X, b'TeM3_SP_XP002p2_0.0.0 (30),XPR003.9.0', True),
+    # an unknown series has no history to compare against
+    (CAR.TESLA_MODEL_Y, b'TeMYG4_Main_0.0.0 (12),Y4004.01.0', False),
+    (CAR.TESLA_MODEL_Y, b'garbage', False),
+  ])
+  def test_unknown_fw(self, car, fw, expected):
+    assert is_legacy_das_steering(car, fw) == expected
+
+  def test_flag_set_from_fuzzy_match(self):
+    for fw, legacy in ((b'TeMYG4_Legacy3Y_0.0.0 (5),Y4003.03.9', True),
+                       (b'TeMYG4_Main_0.0.0 (99),Y4003.14.0', False)):
+      car_fw = [CarParams.CarFw(ecu=Ecu.eps, fwVersion=fw, address=EPS_ADDR, subAddress=0, brand='tesla')]
+      CP = CarInterface.get_params(CAR.TESLA_MODEL_Y, gen_empty_fingerprint(), car_fw, False, False, False)
+      assert bool(CP.flags & TeslaFlags.LEGACY_DAS_STEERING) == legacy
+      assert bool(CP.safetyConfigs[0].safetyParam & TeslaSafetyFlags.LEGACY_DAS_STEERING) == legacy
 
 
 class TestTeslaFingerprint:

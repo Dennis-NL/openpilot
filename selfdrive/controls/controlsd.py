@@ -168,8 +168,11 @@ class Controls(IQControlsLayer):
 
     CC.latActive = _lat_active and not CS.steerFaultTemporary and not CS.steerFaultPermanent and \
                    (not standstill or self.CP.steerAtStandstill)
+    # long control may stay active through a gas override on platforms that opt in
+    override_longitudinal = any(e.overrideLongitudinal for e in self.sm['onroadEvents'])
+    long_through_override = self.CP_IQ.longActiveWithGasOverride and self.CP.openpilotLongitudinalControl
     CC.longActive = CC.enabled and not getattr(CS, 'cruiseFaultLateralMode', False) and \
-                    not any(e.overrideLongitudinal for e in self.sm['onroadEvents']) and \
+                    (not override_longitudinal or long_through_override) and \
                     (self.CP.openpilotLongitudinalControl or not self.CP_IQ.pcmCruiseSpeed)
 
     actuators = CC.actuators
@@ -184,7 +187,7 @@ class Controls(IQControlsLayer):
     # accel PID loop
     pid_accel_limits = self.CI.get_pid_accel_limits(self.CP, self.CP_IQ, CS.vEgo, CS.vCruise * CV.KPH_TO_MS)
     actuators.accel = float(self.LoC.update(CC.longActive, CS, long_plan.aTarget, long_plan.shouldStop, pid_accel_limits,
-                                            long_plan.leadDistance, long_plan.hasLead))
+                                            long_plan.leadDistance, long_plan.hasLead, gas_override=override_longitudinal))
 
     # Steering PID loop and lateral MPC
     # Reset desired curvature to current to avoid violating the limits on engage

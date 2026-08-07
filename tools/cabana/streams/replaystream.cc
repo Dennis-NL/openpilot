@@ -1,5 +1,7 @@
 #include "tools/cabana/streams/replaystream.h"
 
+#include <filesystem>
+
 #include <QLabel>
 #include <QFileDialog>
 #include <QGridLayout>
@@ -14,10 +16,7 @@ ReplayStream::ReplayStream(QObject *parent) : AbstractStream(parent) {
   unsetenv("ZMQ");
   setenv("COMMA_CACHE", "/tmp/comma_download_cache", 1);
 
-  // TODO: Remove when OpenpilotPrefix supports ZMQ
-#ifndef __APPLE__
   op_prefix = std::make_unique<OpenpilotPrefix>();
-#endif
 
   QObject::connect(&settings, &Settings::changed, this, [this]() {
     if (replay) replay->setSegmentCacheLimit(settings.max_cached_minutes);
@@ -46,9 +45,9 @@ void ReplayStream::mergeSegments() {
   }
 }
 
-bool ReplayStream::loadRoute(const QString &route, const QString &data_dir, uint32_t replay_flags, bool auto_source) {
-  replay.reset(new Replay(route.toStdString(), {"can", "roadEncodeIdx", "driverEncodeIdx", "wideRoadEncodeIdx", "carParams"},
-                          {}, nullptr, replay_flags, data_dir.toStdString(), auto_source));
+bool ReplayStream::loadRoute(const std::string &route, const std::string &data_dir, uint32_t replay_flags, bool auto_source) {
+  replay.reset(new Replay(route, {"can", "roadEncodeIdx", "driverEncodeIdx", "wideRoadEncodeIdx", "carParams"},
+                          {}, nullptr, replay_flags, data_dir, auto_source));
   replay->setSegmentCacheLimit(settings.max_cached_minutes);
   replay->installEventFilter([this](const Event *event) { return eventFilter(event); });
 
@@ -68,21 +67,21 @@ bool ReplayStream::loadRoute(const QString &route, const QString &data_dir, uint
       QString message;
       if (auth_content.empty()) {
         message = "Authentication Required. Please run the following command to authenticate:\n\n"
-                  "python3 tools/lib/auth.py\n\n"
+                  "python3 openpilot/tools/lib/auth.py\n\n"
                   "This will grant access to routes from your comma account.";
       } else {
         message = tr("Access Denied. You do not have permission to access route:\n\n%1\n\n"
-                     "This is likely a private route.").arg(route);
+                     "This is likely a private route.").arg(QString::fromStdString(route));
       }
       QMessageBox::warning(nullptr, tr("Access Denied"), message);
     } else if (replay->lastRouteError() == RouteLoadError::NetworkError) {
       QMessageBox::warning(nullptr, tr("Network Error"),
-                          tr("Unable to load the route:\n\n %1.\n\nPlease check your network connection and try again.").arg(route));
+                          tr("Unable to load the route:\n\n %1.\n\nPlease check your network connection and try again.").arg(QString::fromStdString(route)));
     } else if (replay->lastRouteError() == RouteLoadError::FileNotFound) {
       QMessageBox::warning(nullptr, tr("Route Not Found"),
-                           tr("The specified route could not be found:\n\n %1.\n\nPlease check the route name and try again.").arg(route));
+                           tr("The specified route could not be found:\n\n %1.\n\nPlease check the route name and try again.").arg(QString::fromStdString(route)));
     } else {
-      QMessageBox::warning(nullptr, tr("Route Load Failed"), tr("Failed to load route: '%1'").arg(route));
+      QMessageBox::warning(nullptr, tr("Route Load Failed"), tr("Failed to load route: '%1'").arg(QString::fromStdString(route)));
     }
   }
   return success;
@@ -136,10 +135,10 @@ OpenReplayWidget::OpenReplayWidget(QWidget *parent) : AbstractOpenStreamWidget(p
 
   setMinimumWidth(550);
   QObject::connect(browse_local_btn, &QPushButton::clicked, [=]() {
-    QString dir = QFileDialog::getExistingDirectory(this, tr("Open Local Route"), settings.last_route_dir);
+    QString dir = QFileDialog::getExistingDirectory(this, tr("Open Local Route"), QString::fromStdString(settings.last_route_dir));
     if (!dir.isEmpty()) {
       route_edit->setText(dir);
-      settings.last_route_dir = QFileInfo(dir).absolutePath();
+      settings.last_route_dir = std::filesystem::absolute(dir.toStdString()).parent_path().string();
     }
   });
   QObject::connect(browse_remote_btn, &QPushButton::clicked, [this]() {
@@ -168,7 +167,7 @@ AbstractStream *OpenReplayWidget::open() {
     if (cameras[2]->isChecked()) flags |= REPLAY_FLAG_ECAM;
     if (flags == REPLAY_FLAG_NONE && !cameras[0]->isChecked()) flags = REPLAY_FLAG_NO_VIPC;
 
-    if (replay_stream->loadRoute(route, data_dir, flags)) {
+    if (replay_stream->loadRoute(route.toStdString(), data_dir.toStdString(), flags)) {
       return replay_stream.release();
     }
   }

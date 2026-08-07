@@ -224,6 +224,17 @@ class Soundd(AlertSoundFilter):
     sm = messaging.SubMaster(['selfdriveState', 'soundPressure'])
     threading.Thread(target=self.webrtc_audio_thread, daemon=True).start()
 
+    while True:
+      try:
+        self._stream_loop(sd, sm)
+      except Exception:
+        # Some A1s wedge the audio DSP (ALSA EINVAL / ADSP_EFAILED until reboot). Dying here
+        # crash-loops the process and selfdrived raises a takeover alert mid-drive over alert
+        # sounds - stay alive and keep retrying instead; recovers if the DSP comes back.
+        cloudlog.exception("soundd: audio stream unavailable, retrying")
+        time.sleep(10)
+
+  def _stream_loop(self, sd, sm):
     with self.get_stream(sd) as stream:
       rk = Ratekeeper(20)
 

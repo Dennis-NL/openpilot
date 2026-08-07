@@ -47,6 +47,8 @@ class IQHudRenderer(HudRenderer):
     has_limit = self.speed_limit_renderer.speed_limit_valid or self.speed_limit_renderer.speed_limit_last_valid
     self.limit_available = has_limit
     self.limit_speed_text = str(round(self.speed_limit_renderer.speed_limit_last)) if has_limit else "---"
+    offset = round(self.speed_limit_renderer.speed_limit_offset)
+    self.limit_offset_text = f"{offset:+d}" if has_limit and offset != 0 else ""
     self.turn_signal_controller.update()
     self.speed_renderer.update()
     self.soft_warning_renderer.update()

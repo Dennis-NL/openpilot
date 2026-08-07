@@ -1,14 +1,17 @@
 #include "tools/cabana/streamselector.h"
 
+#include <filesystem>
+
 #include <QFileDialog>
 #include <QLabel>
 #include <QPushButton>
 
-#include "streams/socketcanstream.h"
 #include "tools/cabana/streams/devicestream.h"
 #include "tools/cabana/streams/pandastream.h"
 #include "tools/cabana/streams/replaystream.h"
+#ifdef __linux__
 #include "tools/cabana/streams/socketcanstream.h"
+#endif
 
 StreamSelector::StreamSelector(QWidget *parent) : QDialog(parent) {
   setWindowTitle(tr("Open stream"));
@@ -35,9 +38,11 @@ StreamSelector::StreamSelector(QWidget *parent) : QDialog(parent) {
 
   addStreamWidget(new OpenReplayWidget, tr("&Replay"));
   addStreamWidget(new OpenPandaWidget, tr("&Panda"));
+#ifdef __linux__
   if (SocketCanStream::available()) {
     addStreamWidget(new OpenSocketCanWidget, tr("&SocketCAN"));
   }
+#endif
   addStreamWidget(new OpenDeviceWidget, tr("&Device"));
 
   QObject::connect(btn_box, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -49,10 +54,10 @@ StreamSelector::StreamSelector(QWidget *parent) : QDialog(parent) {
     setEnabled(true);
   });
   QObject::connect(file_btn, &QPushButton::clicked, [this]() {
-    QString fn = QFileDialog::getOpenFileName(this, tr("Open File"), settings.last_dir, "DBC (*.dbc)");
+    QString fn = QFileDialog::getOpenFileName(this, tr("Open File"), QString::fromStdString(settings.last_dir), "DBC (*.dbc)");
     if (!fn.isEmpty()) {
       dbc_file->setText(fn);
-      settings.last_dir = QFileInfo(fn).absolutePath();
+      settings.last_dir = std::filesystem::absolute(fn.toStdString()).parent_path().string();
     }
   });
 }

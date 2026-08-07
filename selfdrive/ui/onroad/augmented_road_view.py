@@ -9,6 +9,7 @@ from openpilot.selfdrive.ui.onroad.alert_renderer import AlertRenderer
 from openpilot.selfdrive.ui.onroad.driver_state import DriverStateRenderer as BaseDriverStateRenderer, BTN_SIZE
 from openpilot.selfdrive.ui.onroad.hud_renderer import HudRenderer as BaseHudRenderer
 from openpilot.selfdrive.ui.onroad.model_renderer import ModelRenderer
+from openpilot.selfdrive.ui.onroad.environment_renderer import EnvironmentRenderer
 from openpilot.selfdrive.ui.onroad.cameraview import CameraView
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.common.issue_debug import log_issue_limited
@@ -55,6 +56,7 @@ class AugmentedRoadView(CameraView, AugmentedRoadViewIQ):
     self._split_nav_available = False
 
     self.model_renderer = ModelRenderer()
+    self.environment_renderer = EnvironmentRenderer()
     self.alert_renderer = AlertRenderer()
     self._hud_renderer = IQHudRenderer()
     self.driver_state_renderer = DriverStateRendererIQ()
@@ -114,6 +116,7 @@ class AugmentedRoadView(CameraView, AugmentedRoadViewIQ):
 
     # Draw all UI overlays
     self.model_renderer.render(camera_rect)
+    self.environment_renderer.render(camera_rect)
     AugmentedRoadViewIQ.update_fade_out_bottom_overlay(self, camera_rect)
     self._hud_renderer.render(camera_rect)
 
@@ -280,6 +283,7 @@ class AugmentedRoadView(CameraView, AugmentedRoadViewIQ):
     ])
     self.model_renderer.set_transform(video_transform @ calib_transform)
     self.model_renderer.set_frame_transform(video_transform, is_wide_camera)
+    self.environment_renderer.set_transform(video_transform @ calib_transform)
 
     return self._cached_matrix
 
