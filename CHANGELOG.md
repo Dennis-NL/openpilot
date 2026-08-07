@@ -67,7 +67,7 @@ Volkswagen support got a significant overhaul:
 
 **Volkswagen MEB and MQBevo**
 
-IQ.Pilot now **officially** supports the Volkswagen MEB and MQBevo platforms! Including the ID.4, ID.3, ID.5, Golf MK8, and Tiguan 2024+, up to model year 2026, as long as you have a compatible camera or gateway harness. Both LKAS and ACC are supported. This is the foundation of the `release-meb` branch, which is auto-synced from `release` and tailored specifically for these platforms.
+IQ.Pilot now **officially** supports the Volkswagen MEB and MQBevo platforms! Including the ID.4, ID.3, ID.5, and Golf MK8 through model year 2025, as long as you have a compatible camera or gateway harness. Both LKAS and ACC are supported. This is the foundation of the `release-meb` branch, which is auto-synced from `release` and tailored specifically for these platforms.
 
 **Toyota/Lexus**
 
@@ -98,9 +98,9 @@ IQ.Pilot's on-road UI got a number of improvements:
 - Revamped Branch switcher to properly switch branches, and updater has had bugfixes to fix install issues where the device claims to have updated but has not actually updated. 
 
 
-**IQ.OS 3.14**
+**IQ.OS 4.9.1**
 
-IQ.OS 3.14 is bundeled with IQ.Pilot 1.0c. IQ.OS is available for all supported devices: Comma 3, Comma 3x, Comma 4, Konik A1/M, and Mr.One C3/C3(X)Lite. It's a lightweight OS based on Ubuntu 24.04, includes Bluetooth (BLE), has a much smaller install footprint, and is continuously optimized for IQ.Pilot.
+IQ.OS 4.9.1 is bundled with IQ.Pilot 1.0c. IQ.OS is available for all supported devices: Comma 3, Comma 3x, Comma 4, Konik A1/M, and Mr.One C3/C3 Lite. It's a lightweight OS based on Ubuntu 24.04, includes Bluetooth (BLE), has a much smaller install footprint, and is continuously optimized for IQ.Pilot.
 
 - Konn3kt now stays online regardless of IQ.Pilot's status. If IQ.Pilot fails to boot, Konn3kt remains available so you can switch branches, SSH in, and recover remotely without a physical connection, including over cellular. 
 - Bug causing konn3kt setup time on a fresh install dropped from ~30 minutes fixed, setup dropped down to ~10 seconds.
@@ -125,3 +125,106 @@ Connection stability between Konn3kt and IQ.Pilot (Konn3ktion) is greatly improv
 **eSIM**
 
 eSIM detection, provisioning, and profile management groundwork is now built into the device. The app can detect whether your device has an embedded SIM, provision it, and manage profiles without a physical SIM swap. eSIM support requires a compatible data plan; Contact IQ.Pilot support in the discord for known working eSIM carriers and plans. Note: eSIM is experimental and generally requires a hotspot-style data plan or an MVNO that does not IMEI filter.
+
+**Additional 1.0c Updates**
+
+**Navigate on IQ.Pilot and Offline Maps**
+
+- Added Home, Work, and Recent destination shortcuts, route cancellation, saved-destination management, and course-up map rotation.
+- Added an interactive off-road map with panning and current-location display, plus on-screen maneuver artwork for turns, merges, forks, off-ramps, continuation instructions, and arrival.
+- Added navigation-memory handling so important fork and exit guidance remains available when a model output briefly omits it.
+- Added full offline routing through a packaged Valhalla runtime. Navigation can now operate without Mapbox or an active internet connection.
+- Added simultaneous installation of multiple offline regions, including offline raster tiles for the displayed map as well as routing and road metadata.
+- Added separate Online On-Screen Maps and Offline On-Screen Maps controls, resumable regional downloads, combined routing-and-tile download progress, automatic mapd v2 region recognition and missing-data restoration.
+- Added a hosted regional tile-bundle service with a fallback source, background tile decoding, and bounded texture caching to keep map work off the UI render path.
+- Reduced navigation CPU, GPU, and memory overhead so maps can remain open for long drives without competing with the driving model.
+
+**IQ Speed Assist and Camera Alerts**
+
+- Added the new IQ Speed Assist architecture, with TomTom data alongside dashboard, Mapbox, and offline OpenStreetMap sources.
+- Added optional cruise-set-speed mirroring, percentage-based offset zones for low, medium, and higher speed ranges, and earlier, smoother upcoming-speed-limit reactions in the longitudinal cruise envelope.
+- Added clearer on-road SLC source, state, pending-limit, and adaptation feedback.
+- Added individual controls for speed, red-light, and Flock/ALPR alerts, plus optional speed-camera slowdown using the detected limit and a configurable safety factor.
+- Added haptic speed-camera feedback on supported Hyundai, Kia, and Genesis vehicles.
+
+**Construction Zone Assist**
+
+- Added optional camera-based Construction Zone Assist, which detects bright-orange work-zone barrels and markers.
+- Added an adjustable work-zone target speed (60 mph by default), plus daylight, road-speed, and active-zone checks to reduce unrelated reflective detections.
+- Added lightweight processing designed to run alongside the driving and driver-monitoring models.
+
+**IQ.Dynamic, Stops, and Longitudinal Control**
+
+- Added separate IQ.Dynamic road-speed and lead-speed thresholds, configurable curve, low-speed, slower-lead, stopped-lead, and model-predicted-stop activation, and an adjustable model-stop prediction horizon.
+- Added automatic Volkswagen stock-radar set-speed and following-gap synchronization when radar blending is enabled on supported PQ vehicles.
+- Added an independent custom stopping-distance adjustment, smoother stopped-lead pull-away, and end-to-end launch assistance when the model predicts an opening path.
+- Added dedicated departure chimes for an opening path and a pulling-away lead, Experimental Lead MPC, and end-to-end cruise convergence toward the selected speed as the road opens.
+- Added configurable end-to-end set-speed selection using either a preset or the driver’s current target, per-platform stopping overrides, accelerator-override longitudinal control on supported vehicles, and predictive reactions to speed limits and curves.
+
+**Steering, Lane Changes, and Environment View**
+
+- Added an on-road Always-On Lateral control path for supported Hyundai LFA buttons and Bluetooth-controller commands for testing or controlling it in Joystick Mode.
+- Added continuous lane changes while the blinker is held, while retaining driver confirmation for subsequent maneuvers.
+- Added configurable model-action smoothing, angle-based lateral control, optional VW ALC torque blending, a dedicated Volkswagen PQ HCA7 torque controller, and live-learned curvature correction for supported Volkswagen MEB configurations.
+- Added an optional Environment View that can replace the model scene and render 3D object boxes, a ground grid, lane lines, road edges, and the planned path.
+- Added a precompiled Qualcomm IQ.Vision model and bandwidth-efficient camera preprocessing to reduce contention with the primary driving model.
+
+**Driving Models and IQModeld**
+
+- Added the unified IQModeld runtime and native bridge for current combined models and legacy split models.
+- Added fused vision-and-policy execution for supported supercombo bundles, zero-copy camera-frame handling through the tinygrad runner, and unified combined-artifact, combined-split, fused, tinygrad, and ONNX runner support.
+- Added current-model redownload, manifest refresh when published models change, a clear Driving Model Updating state, and engagement gating until the selected model is ready.
+
+**Home, On-Road UI, and Visuals**
+
+- Added dedicated Routes, Navigation, Video, and status surfaces, a selectable home-panel widget, 60 fps off-road BIG UI presentation, and device-specific frame pacing.
+- Added Comma 4 anti-aliasing, augmented-road presentation, driver-camera orientation improvements, and an expanded status bar with temperature, vehicle state, Konn3kt status, and connected Wi-Fi network name.
+- Added the installed IQ.OS version to Software settings, tappable branch information in the BIG UI header, smooth edge-swipe navigation, transitions, parallax, shadows, animated controls, and a seamless build-spinner-to-UI transition.
+- Added a glowing primary-lead orb, IQ.Pilot teal and pink acceleration-bar styling, a top-bar Silent Mode bell, Night Mode display sleep after sunset, and screen recording through Konn3kt.
+
+**Dashcam and Route Viewer**
+
+- Increased qcamera resolution by 5× while balancing storage and upload use.
+- Added crash-safe route writes, frequent durable checkpoints, power-loss preservation, and boot-time recovery for incomplete recordings.
+- Added an on-device Routes screen with date, duration, camera availability, cloud-upload state, and local, uploading, uploaded, and cloud-only badges.
+- Added local playback of road, wide, and driver video with synchronized audio; cloud-only route discovery and streaming through Konn3kt; and synchronized telemetry, model path, steering angle, driver-monitoring, vehicle speed, and cruise-set-speed overlays.
+- Added qlog-only route visualization, fullscreen playback, auto-hiding controls, loading feedback, scrubbing, fast-forward speeds, hardware HEVC decode, local-time presentation, bounded playback buffering, and screen-awake behavior during playback.
+
+**Live View, Audio, and WebSSH**
+
+- Added a Live View indicator on the driving screen, dual-camera picture-in-picture streaming, and live model-path overlay while both the device and Konn3kt use cellular.
+- Added instant keyframe requests, network-adaptive encoder bitrate, and full-resolution HDR driver-camera input on Comma 4.
+
+**Konn3kt Services, Bluetooth, and Backup**
+
+- Added independent device services that stay available when IQ.Pilot is stopped or cannot enter its main UI, including OS-level recovery over Wi-Fi and cellular.
+- Added a dedicated `iquploaderd` route-and-log uploader, automatic IQ.Pilot crash-log uploads, Volkswagen and Tesla odometer display, backup-and-restore services, encrypted backup archives, backup status, and Konn3kt RPC support for compatible Volkswagen coding and diagnostics.
+- Added direct Bluetooth Low Energy control across comma 3, comma 3X, comma 4, Konik, and Mr.One hardware, including authenticated requests, replay protection, settings synchronization, automatic discovery and pairing, and fallback when internet connectivity is unavailable.
+- Added BLE control for supported IQ.Pilot, vehicle, display, network, navigation, and driving settings; live propagation to active services; and setup-stage Wi-Fi scanning, Wi-Fi connection, network status, channel selection, install start, setup progress, and installation status.
+
+**Volkswagen PQ and MQB**
+
+- Added Always-On Lateral for ECAN, non-ECAN/ACAN, CC-only, and CC-less PQ configurations; SEAT Alhambra TRW460i Stop-and-Go with automatic resume; and Stop-and-Go for additional electronic-parking-brake configurations.
+- Added MQB-A0 automatic resume and steering-lockout options, standstill handling for supported non-EPB ACC vehicles, and ACC-command suppression while braking.
+- Added dedicated PQ radar engagement, cancellation, set-speed, acceleration, and following-gap management; automatic PQ EPS-patch detection; and patch-aware minimum-steering-speed handling.
+- Added a PQ firmware tool with backup, dump upload, patch detection, programming, and recovery; persistent PQ LKAS coding over TP2.0/KWP; model-year ECU fingerprinting; expanded Passat identification; distance-button mapping; dashboard personality presentation; and continued MQB lateral control while cruise is faulted.
+- Added stock lateral handoff when IQ.Pilot lateral is inactive, explicit Volkswagen readiness handling, and Volkswagen odometer persistence with cloud backup.
+
+**Platform Support**
+
+- Added MEB/MQBevo steering ratios, steering behavior, zero-speed steering where supported, ACC-HUD handling, and Drive/Park state handling. Supported configurations include ID.3, ID.4, ID.5, and Golf Mk8 through model year 2025.
+- Added Honda-specific final-stopping deceleration control, Subaru Creep from Standstill, and guarded Tesla vehicle-bus parsing for supported harnesses.
+- Added more Hyundai/Kia/Genesis CAN-FD and HDA2 handling, radar-track and corner-radar controls, Camera SCC and platform-specific cruise controls, Auto Cruise Control and Auto Engage, custom steering and steering-rate controls, lane-change steering-rate controls, and expanded parameter/fingerprint diagnostics.
+
+**IQ.OS, Power, Network, and Recovery**
+
+- Updated the bundled platform to IQ.OS 4.9.1, with device-specific boot and display support, Comma 4 display calibration, HDR camera and display-color support, USB 3 logging, USB link-error recovery, 2 GB compressed zram swap, and consistent startup runtime packaging.
+- Added FastSleep deep standby, including five-minute idle entry after parking, low-voltage entry, staged voltage shutdown thresholds, suspension of high-power services, Konn3kt recovery connectivity during standby, voltage-aware power decisions, and immediate wake on ignition or charging.
+- Added zero-touch Bluetooth onboarding, Konn3kt pairing-code presentation, IQ.OS update confirmation, Bluetooth game-controller support for Joystick Mode, and Bluetooth operation independent of the main IQ.Pilot process.
+- Added a redesigned Network settings experience, explicit Wi-Fi Disconnect, cellular reconnection after APN changes, Comma 3X SIM electrical-probe recovery, and QR/manual eSIM activation with profile listing, refresh, enable, disable, and deletion.
+- Added Force On-Road for a temporary ten-minute parked diagnostic session, an Update & Reboot recovery-screen action, and USB Storage mode.
+
+**Updater, Reliability, and Performance**
+
+- Added Konn3kt confirmation before IQ.OS updates, interrupted submodule/artifact-preparation recovery, precompiled release preparation for comma 3, comma 3X, and comma 4, and crash-screen update-and-reboot without entering the full UI.
+- Added independent model, navigation, map, uploader, backup, and perception services; navigation/map recovery that does not block engagement; power-state coordination; startup parameter ownership and permission normalization; message-queue dead-reader cleanup; lower shared-memory use; and clearer build, process-state, and diagnostic output.
