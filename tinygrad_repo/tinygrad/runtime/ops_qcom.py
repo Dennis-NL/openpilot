@@ -16,8 +16,19 @@ if getenv("IOCTL"): import extra.qcom_gpu_driver.opencl_ioctl  # noqa: F401  # p
 
 BUFTYPE_BUF, BUFTYPE_TEX, BUFTYPE_IBO = 0, 1, 2
 
+# precompiled aarch64 machine code for the dcache_flush kernel below (dc cvac
+# loop + dsb sy). Shipping the bytes avoids a runtime clang subprocess whose
+# compile was getting killed by an msgq SIGUSR2 landing on the clang child's
+# recycled TID -> modeld crash. Regenerate if the kernel source changes:
+#   prg = to_program(...); print(prg.src[4].arg.hex())
+_DCACHE_FLUSH_AARCH64 = bytes.fromhex("3f040071cb000054287c4092207a0bd500000191080500f1a1ffff549f3f03d5c0035fd6")
+
 @functools.cache
 def dcache_flush():
+  # fast path: load shipped machine code, no compile at all (device is aarch64)
+  if os.uname().machine in ("aarch64", "arm64"):
+    try: return Device["CPU"].runtime("dcache_flush", _DCACHE_FLUSH_AARCH64)
+    except Exception: pass
   from tinygrad.uop.ops import UOp, Ops, KernelInfo
   from tinygrad.codegen import to_program
   buf, n = UOp.param(0, dtypes.uint8.ptr()), UOp.param(1, dtypes.uint8.ptr())
