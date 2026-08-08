@@ -99,10 +99,10 @@ static void volkswagen_mlb_rx_hook(const CANPacket_t *msg) {
     }
 
     // Signal: Motor_03.MO_Fahrpedalrohwert_01
-    // Signal: Motor_03.MO_Fahrer_bremst
+    // Signal: Motor_03.MO_BLS (bit 34) -- MO_Fahrer_bremst (bit 35) sticks/is unreliable on real MLB hardware
     if (msg->addr == MSG_MOTOR_03) {
       gas_pressed = msg->data[6] != 0U;
-      volkswagen_brake_pedal_switch = GET_BIT(msg, 35U);
+      volkswagen_brake_pedal_switch = GET_BIT(msg, 34U);
     }
 
     if (msg->addr == MSG_ESP_05) {
