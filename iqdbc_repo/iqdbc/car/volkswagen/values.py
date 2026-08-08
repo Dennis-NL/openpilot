@@ -2,7 +2,7 @@ from collections import defaultdict, namedtuple
 from dataclasses import dataclass, field
 from enum import Enum, IntFlag, StrEnum
 
-from iqdbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, CanBusBase, CarSpecs, DbcDict, PlatformConfig, Platforms, structs, uds
+from iqdbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, CanBusBase, CarSpecs, DbcDict, DT_CTRL, PlatformConfig, Platforms, structs, uds
 from iqdbc.car.lateral import CurvatureSteeringLimits
 from iqdbc.can import CANDefine
 from iqdbc.car.common.conversions import Conversions as CV
@@ -204,9 +204,7 @@ class CarControllerParams:
         self.STEER_DRIVER_ALLOWANCE = 60  # Driver intervention threshold 0.6 Nm
         self.STEER_DELTA_UP = 9  # Max HCA reached in 0.66s (STEER_MAX / (50Hz * 0.66))
         self.STEER_DELTA_DOWN = 10  # Min HCA reached in 0.60s (STEER_MAX / (50Hz * 0.60))
-        # -3.0 faults the 2014 Audi Q5 ACC ECU (requires ignition cycle to clear); matches the
-        # safety firmware's VOLKSWAGEN_MLB_LONG_LIMITS.min_accel in volkswagen_mlb.h
-        self.ACCEL_MIN = -2.95
+        self.ACC_HUD_TEXT_STEP = int(2.0 / DT_CTRL)  # ACC_02 primary display text dwell time
 
         if CP.carFingerprint == CAR.PORSCHE_MACAN_MK1:
           self.shifter_values = can_define.dv["Getriebe_03"]["GE_Waehlhebel"]
@@ -221,6 +219,13 @@ class CarControllerParams:
           Button(structs.CarState.ButtonEvent.Type.cancel, "LS_01", "LS_Abbrechen", [1]),
           Button(structs.CarState.ButtonEvent.Type.gapAdjustCruise, "LS_01", "LS_Verstellung_Zeitluecke", [1, 2, 3]),
         ]
+
+        # ACC_02.ACC_Texte_Primaeranz, primary ACC display text at the bottom of the cluster
+        self.ACC_HUD_TEXTS = {
+          "none": 0,
+          "setSpeed": 21,
+        }
+        self.ACC_HUD_TEXT_DISTANCE = {1: 2, 2: 3, 3: 4, 4: 5}  # follow distance bars to display text
 
       else:
         self.STEER_DRIVER_ALLOWANCE = 80    # Driver intervention threshold 0.8 Nm

@@ -99,9 +99,8 @@ void can_set_checksum(CANPacket_t *packet);
 #define MSG_LS_01       0x10BU   // TX by OP, ACC control buttons for cancel/resume
 #define MSG_MOTOR_03    0x105U   // RX from ECU, for driver throttle input and brake switch status
 #define MSG_TSK_02      0x10CU   // RX from ECU, for ACC status from drivetrain coordinator
-#define MSG_ACC_05      0x10DU   // RX from radar, for ACC status; TX by OP (simulating radar/ECU) when longitudinal is active
-#define MSG_ACC_01      0x109U   // RX from radar, for ACC status (Audi B8); TX by OP (simulating radar/ECU) when longitudinal is active
-#define MSG_TSK_04      0x10EU   // Used only for MLB XOR checksum seed calc; not RX-checked on this fork's MLB variant
+#define MSG_ACC_05      0x10DU   // RX from radar, for ACC status
+#define MSG_ACC_01      0x109U   // TX by OP, ACC control instructions to the drivetrain coordinator
 
 static void volkswagen_common_init(void) {
   volkswagen_set_button_prev = false;
@@ -262,18 +261,6 @@ static uint32_t volkswagen_mqb_meb_get_checksum(const CANPacket_t *msg) {
 static uint8_t volkswagen_mqb_meb_get_counter(const CANPacket_t *msg) {
   // MQB/MEB message counters are consistently found at LSB 8.
   return (uint8_t)msg->data[1] & 0xFU;
-}
-
-static uint32_t volkswagen_mqb_meb_mlb_compute_xor(const CANPacket_t *msg, uint8_t initial_value) {
-  int len = GET_LEN(msg);
-  uint8_t checksum = initial_value;
-
-  // XOR all bytes except the checksum byte (byte 0)
-  for (int i = 1; i < len; i++) {
-    checksum ^= (uint8_t)msg->data[i];
-  }
-
-  return checksum;
 }
 
 static uint32_t volkswagen_mqb_meb_compute_crc(const CANPacket_t *msg) {

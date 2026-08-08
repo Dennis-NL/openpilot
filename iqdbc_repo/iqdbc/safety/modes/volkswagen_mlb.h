@@ -3,25 +3,21 @@
 #include "iqdbc/safety/declarations.h"
 #include "iqdbc/safety/modes/volkswagen_common.h"
 
+// -3.0 m/s^2 (VW_IQ_MIN_LONG_ACCEL, shared with MQB) faults the Audi Q5 ACC ECU and requires an
+// ignition cycle to clear; MLB needs its own, stricter floor instead of the shared MQB constant.
+#define VOLKSWAGEN_MLB_MIN_LONG_ACCEL -2950
 
-static uint32_t volkswagen_mlb_compute_checksum(const CANPacket_t *msg) {
-  // for reference see python implementation in opendbc/car/volkswagen
-  uint32_t result;
-
-  if (msg->addr == MSG_LH_EPS_03) {
-    result = volkswagen_mqb_meb_compute_crc(msg);
-  } else {
-    uint8_t seed = (uint8_t)((msg->addr & 0xFFU) - 1U);
-    if ((msg->addr == MSG_ESP_05) || (msg->addr == MSG_TSK_04)) {
-      seed = (uint8_t)(seed + 2U);
-    } else if (msg->addr == MSG_ACC_02) {
-      seed = (uint8_t)(seed + 4U);
-    } else {
-      // seed unchanged for all other MLB XOR messages
-    }
-    result = volkswagen_mqb_meb_mlb_compute_xor(msg, seed);
+static bool volkswagen_mlb_long_accel_check(int desired_accel) {
+  if (desired_accel == VW_IQ_INACTIVE_LONG_ACCEL) {
+    return false;
   }
-  return result;
+  if (!controls_allowed) {
+    return true;
+  }
+  if (gas_pressed_prev && !volkswagen_allow_long_accel_with_gas_pressed) {
+    return true;
+  }
+  return (desired_accel > VW_IQ_MAX_LONG_ACCEL) || (desired_accel < VOLKSWAGEN_MLB_MIN_LONG_ACCEL);
 }
 
 static safety_config volkswagen_mlb_init(uint16_t param) {
@@ -29,19 +25,15 @@ static safety_config volkswagen_mlb_init(uint16_t param) {
   static const CanMsg VOLKSWAGEN_MLB_STOCK_TX_MSGS[] = {{MSG_HCA_01, 0, 8, .check_relay = true}, {MSG_LDW_02, 0, 8, .check_relay = true},
                                                         {MSG_LS_01, 0, 4, .check_relay = false}, {MSG_LS_01, 2, 4, .check_relay = false}};
 
-  // TX by OP when longitudinal control is active: ACC_01 (accel command) and ACC_05/ACC_02 simulate the
-  // radar/ECU status + HUD output that would otherwise come from the stock hardware
   static const CanMsg VOLKSWAGEN_MLB_LONG_TX_MSGS[] = {{MSG_HCA_01, 0, 8, .check_relay = true}, {MSG_LDW_02, 0, 8, .check_relay = true},
-                                                        {MSG_LS_01, 0, 4, .check_relay = false}, {MSG_LS_01, 2, 4, .check_relay = false},
-                                                        {MSG_ACC_02, 0, 8, .check_relay = true}, {MSG_ACC_01, 0, 8, .check_relay = true},
-                                                        {MSG_ACC_05, 0, 8, .check_relay = true}};
+                                                       {MSG_ACC_01, 0, 8, .check_relay = true}, {MSG_ACC_02, 0, 8, .check_relay = true}};
 
   static RxCheck volkswagen_mlb_rx_checks[] = {
     // TODO: implement checksum validation
     {.msg = {{MSG_ESP_03, 0, 8, 50U, .ignore_checksum = true, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_LH_EPS_03, 0, 8, 100U, .ignore_checksum = true, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_ESP_05, 0, 8, 50U, .ignore_checksum = true, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
-    {.msg = {{MSG_ACC_05, 2, 8, 50U, .ignore_checksum = true, .max_counter = 15U, .ignore_quality_flag = true}, {MSG_TSK_04, 1, 8, 50U, .ignore_checksum = true, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }}},
+    {.msg = {{MSG_ACC_05, 2, 8, 50U, .ignore_checksum = true, .max_counter = 15U, .ignore_quality_flag = true}, {MSG_TSK_02, 0, 8, 50U, .ignore_checksum = true, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }}},
     {.msg = {{MSG_MOTOR_03, 0, 8, 100U, .ignore_checksum = true, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_LS_01, 0, 4, 10U, .ignore_checksum = true, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
   };
@@ -50,6 +42,7 @@ static safety_config volkswagen_mlb_init(uint16_t param) {
 
 #ifdef ALLOW_DEBUG
   volkswagen_longitudinal = GET_FLAG(param, FLAG_VOLKSWAGEN_LONG_CONTROL);
+  volkswagen_allow_long_accel_with_gas_pressed = GET_FLAG(param, FLAG_VOLKSWAGEN_ALLOW_LONG_ACCEL_WITH_GAS_PRESSED);
 #else
   SAFETY_UNUSED(param);
 #endif
@@ -77,18 +70,27 @@ static void volkswagen_mlb_rx_hook(const CANPacket_t *msg) {
     }
 
     if (msg->addr == MSG_LS_01) {
-      // If using openpilot longitudinal, enter controls on falling edge of Set or Resume with main switch on
+      // If using openpilot longitudinal, the stock ACC coordinator is relayed out, so the stalk main
+      // switch is the only remaining source of truth. Enter controls on falling edge of Set or Resume.
+      // Signal: LS_01.LS_Hauptschalter
       // Signal: LS_01.LS_Tip_Setzen
       // Signal: LS_01.LS_Tip_Wiederaufnahme
       if (volkswagen_longitudinal) {
+        acc_main_on = GET_BIT(msg, 12U);
+
         bool set_button = GET_BIT(msg, 16U);
         bool resume_button = GET_BIT(msg, 19U);
         if ((volkswagen_set_button_prev && !set_button) || (volkswagen_resume_button_prev && !resume_button)) {
-          controls_allowed = GET_BIT(msg, 12U);  // LS_Hauptschalter
+          controls_allowed = acc_main_on;
         }
         volkswagen_set_button_prev = set_button;
         volkswagen_resume_button_prev = resume_button;
+
+        if (!acc_main_on) {
+          controls_allowed = false;
+        }
       }
+
       // Always exit controls on rising edge of Cancel
       // Signal: LS_01.LS_Abbrechen
       if (GET_BIT(msg, 13U)) {
@@ -100,8 +102,7 @@ static void volkswagen_mlb_rx_hook(const CANPacket_t *msg) {
     // Signal: Motor_03.MO_Fahrer_bremst
     if (msg->addr == MSG_MOTOR_03) {
       gas_pressed = msg->data[6] != 0U;
-      // Signal: Motor_03.MO_BLS (bit 34) -- MO_Fahrer_bremst (bit 35) is unreliable on real MLB hardware
-      volkswagen_brake_pedal_switch = GET_BIT(msg, 34U);
+      volkswagen_brake_pedal_switch = GET_BIT(msg, 35U);
     }
 
     if (msg->addr == MSG_ESP_05) {
@@ -109,28 +110,24 @@ static void volkswagen_mlb_rx_hook(const CANPacket_t *msg) {
     }
 
     brake_pressed = volkswagen_brake_pedal_switch || volkswagen_brake_pressure_detected;
-  }
 
-  if (msg->bus == 1U) {
-    if (msg->addr == MSG_TSK_04) {
+    if ((msg->addr == MSG_TSK_02) && !volkswagen_longitudinal) {
       // When using stock ACC, enter controls on rising edge of stock ACC engage, exit on disengage
       // Always exit controls on main switch off
-      // Signal: TSK_04.TSK_Status_GRA_ACC_02 (documented signal; TSK_02.TSK_Status is undocumented/unreliable)
-      int acc_status = (msg->data[7] & 0xC0U) >> 6;
+      // Signal: TSK_02.TSK_Status
+      int acc_status = (msg->data[2] & 0x3U);
       bool cruise_engaged = (acc_status == 1) || (acc_status == 2);
       acc_main_on = cruise_engaged || (acc_status == 0);
-      if (!volkswagen_longitudinal) {
-        pcm_cruise_check(cruise_engaged);
-      }
-      if (!acc_main_on) {
-        controls_allowed = false;
-      }
+      pcm_cruise_check(cruise_engaged);
+       if (!acc_main_on) {
+          controls_allowed = false;
+       }
     }
   }
 
   if (msg->bus == 2U) {
     // TODO: See if there's a bus-agnostic TSK message we can use instead
-    if (msg->addr == MSG_ACC_05) {
+    if ((msg->addr == MSG_ACC_05) && !volkswagen_longitudinal) {
       // When using stock ACC, enter controls on rising edge of stock ACC engage, exit on disengage
       // Always exit controls on main switch off
       // Signal: ACC_05.ACC_Status_ACC
@@ -138,9 +135,7 @@ static void volkswagen_mlb_rx_hook(const CANPacket_t *msg) {
       bool cruise_engaged = (acc_status == 3) || (acc_status == 4) || (acc_status == 5);
       acc_main_on = cruise_engaged || (acc_status == 2);
 
-      if (!volkswagen_longitudinal) {
-        pcm_cruise_check(cruise_engaged);
-      }
+      pcm_cruise_check(cruise_engaged);
 
       if (!acc_main_on) {
         controls_allowed = false;
@@ -161,15 +156,6 @@ static bool volkswagen_mlb_tx_hook(const CANPacket_t *msg) {
     .type = TorqueDriverLimited,
   };
 
-  // longitudinal limits
-  // acceleration in m/s2 * 1000 to avoid floating point math
-  // Braking limited to -2.95m/s^2: -3.0 faults the 2014 Audi Q5 ACC ECU (requires ignition cycle to clear)
-  const LongitudinalLimits VOLKSWAGEN_MLB_LONG_LIMITS = {
-    .max_accel = 2000,
-    .min_accel = -2950,
-    .inactive_accel = 0,
-  };
-
   bool tx = true;
 
   // Safety check for HCA_01 Heading Control Assist torque
@@ -185,12 +171,12 @@ static bool volkswagen_mlb_tx_hook(const CANPacket_t *msg) {
   }
 
   // Safety check for ACC_01 acceleration request
+  // Signal: ACC_01.ACC_Sollbeschleunigung (acceleration in m/s^2, scale 0.005, offset -7.22)
   // To avoid floating point math, scale upward and compare to pre-scaled safety m/s^2 boundaries
   if (msg->addr == MSG_ACC_01) {
-    // Signal: ACC_01.ACC_Sollbeschleunigung (acceleration in m/s^2, scale 0.005, offset -7.22)
     int desired_accel = ((((msg->data[4] & 0x07U) << 8) | msg->data[3]) * 5U) - 7220U;
 
-    if (volkswagen_longitudinal_accel_checks(desired_accel, VOLKSWAGEN_MLB_LONG_LIMITS)) {
+    if (volkswagen_mlb_long_accel_check(desired_accel)) {
       tx = false;
     }
   }
@@ -214,5 +200,5 @@ const safety_hooks volkswagen_mlb_hooks = {
   .tx = volkswagen_mlb_tx_hook,
   .get_counter = volkswagen_mqb_meb_get_counter,
   .get_checksum = volkswagen_mqb_meb_get_checksum,
-  .compute_checksum = volkswagen_mlb_compute_checksum,
+  .compute_checksum = volkswagen_mqb_meb_compute_crc,
 };

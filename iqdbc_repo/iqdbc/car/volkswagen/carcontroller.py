@@ -245,6 +245,9 @@ class CarController(CarControllerBase):
     self.leadDistanceBars = 0
     self.lead_distance_bars_last = None
     self.distance_bar_frame = 0
+    self.mlb_hud_text = 0
+    self.mlb_hud_text_frame = 0
+    self.mlb_set_speed_last = 0
     self.speed_limit_last = 0
     self.speed_limit_changed_timer = 0
     self.blinkerActive = None
@@ -279,6 +282,19 @@ class CarController(CarControllerBase):
     if enabled and self.CCS == mqbcan:
       return float(np.interp(v_ego, [0.4, 3.5, 4.0], [0.8, 0.95, 1.0]))
     return 1.0
+
+  def _mlb_acc_hud_text(self, hud_control, set_speed: float) -> int:
+    # ACC_02 primary display text, briefly surfaced on a follow distance or set speed change
+    if hud_control.leadDistanceBars != self.lead_distance_bars_last:
+      self.mlb_hud_text_frame = self.frame
+      self.mlb_hud_text = self.CCP.ACC_HUD_TEXT_DISTANCE.get(hud_control.leadDistanceBars, self.CCP.ACC_HUD_TEXTS["none"])
+    elif set_speed != self.mlb_set_speed_last and hud_control.speedVisible:
+      self.mlb_hud_text_frame = self.frame
+      self.mlb_hud_text = self.CCP.ACC_HUD_TEXTS["setSpeed"]
+    elif self.frame - self.mlb_hud_text_frame >= self.CCP.ACC_HUD_TEXT_STEP:
+      self.mlb_hud_text = self.CCP.ACC_HUD_TEXTS["none"]
+    self.mlb_set_speed_last = set_speed
+    return self.mlb_hud_text
 
   def _should_spam_mqb_a0_resume(self, CS, enabled: bool) -> bool:
     return bool(
@@ -429,8 +445,9 @@ class CarController(CarControllerBase):
         can_sends.append(self.CCS.create_blinker_control(self.packer_pt, self.CAN.pt, CS.ea_hud_stock_values, CS.ea_control_stock_values,
                                                          left_blinker, right_blinker, self.hide_ea_error))
 
-    if self.CP.openpilotLongitudinalControl and self.CCS == mqbcan and not self.acc_counter_seeded and CS.acc_stock_counters:
-      for name in ("ACC_02", "ACC_06", "ACC_07", "ACC_10"):
+    if self.CP.openpilotLongitudinalControl and self.CCS in (mqbcan, mlbcan) and not self.acc_counter_seeded and CS.acc_stock_counters:
+      seed_msgs = ("ACC_01", "ACC_02") if self.CCS is mlbcan else ("ACC_02", "ACC_06", "ACC_07", "ACC_10")
+      for name in seed_msgs:
         addr = self.packer_pt.dbc.name_to_msg[name].address
         self.packer_pt.counters[addr] = (CS.acc_stock_counters[name] + 1) % 16
       self.acc_counter_seeded = True
@@ -499,6 +516,8 @@ class CarController(CarControllerBase):
             self.long_deviation, self.long_jerklimit, eBrakeActive,
             esp_starting_override=esp_starting_override, esp_stopping_override=esp_stopping_override,
           ))
+        elif self.CCS == mlbcan:
+          can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, accel, acc_control, stopping))
         else:
           accel = apply_pq_stopping_accel(self.CP.carFingerprint, accel, stopping)
 
@@ -577,7 +596,10 @@ class CarController(CarControllerBase):
         acc_hud_status = self.CCS.acc_hud_status_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.longActive, CC.cruiseControl.override)
         set_speed = hud_control.setSpeed * CV.MS_TO_KPH
         decel = dVisual(self.CCS, CS)
-        can_sends.append(self.CCS.create_acc_hud_control(self.packer_pt, self.CAN.pt, acc_hud_status, set_speed, leadDistance, self.leadDistanceBars, fcw_alert, hud_control.leadVisible, self.unavailable, decel, d_unresponsive))
+        hud_kwargs = {"hud_text": self._mlb_acc_hud_text(hud_control, set_speed)} if self.CCS is mlbcan else {}
+        can_sends.append(self.CCS.create_acc_hud_control(self.packer_pt, self.CAN.pt, acc_hud_status, set_speed, leadDistance,
+                                                         self.leadDistanceBars, fcw_alert, hud_control.leadVisible, self.unavailable,
+                                                         decel, d_unresponsive, **hud_kwargs))
 
     if self.CP.flags & VolkswagenFlags.PQ:
       iq_lvbs_commander.update_turn_signals(self, CC, CS, can_sends)
