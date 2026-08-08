@@ -682,10 +682,11 @@ class CarState(CarStateBase):
       ret.cruiseState.enabled = ext_cp.vl["ACC_05"]["ACC_Status_ACC"] in (3, 4, 5)
       ret.accFaulted = ext_cp.vl["ACC_05"]["ACC_Status_ACC"] in (6, 7)
     else:
-      ret.cruiseState.available = pt_cp.vl["TSK_02"]["TSK_Status"] in (0, 1, 2)
-      ret.cruiseState.enabled = pt_cp.vl["TSK_02"]["TSK_Status"] in (1, 2)
+      # Signal: TSK_04.TSK_Status_GRA_ACC_02 (documented signal, bus 1; TSK_02.TSK_Status is undocumented/unreliable)
+      ret.cruiseState.available = br_cp.vl["TSK_04"]["TSK_Status_GRA_ACC_02"] in (0, 1, 2)
+      ret.cruiseState.enabled = br_cp.vl["TSK_04"]["TSK_Status_GRA_ACC_02"] in (1, 2)
       ret.cruiseState.speed = ext_cp.vl["ACC_02"]["ACC_Wunschgeschw_02"] * CV.KPH_TO_MS
-      ret.accFaulted = pt_cp.vl["TSK_02"]["TSK_Status"] in (3,)
+      ret.accFaulted = br_cp.vl["TSK_04"]["TSK_Status_GRA_ACC_02"] in (3,)
 
     self.parse_mlb_mqb_steering_state(ret, pt_cp)
     self._update_mlb_iq_alc_state(pt_cp)
