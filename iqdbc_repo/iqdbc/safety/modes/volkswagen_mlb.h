@@ -176,7 +176,7 @@ static bool volkswagen_mlb_tx_hook(const CANPacket_t *msg) {
   if (msg->addr == MSG_ACC_01) {
     int desired_accel = ((((msg->data[4] & 0x07U) << 8) | msg->data[3]) * 5U) - 7220U;
 
-    if (volkswagen_mlb_long_accel_check(desired_accel)) {
+    if (volkswagen_iq_long_accel_check(desired_accel)) {
       tx = false;
     }
   }

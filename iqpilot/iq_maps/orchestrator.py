@@ -121,19 +121,13 @@ def _install_signal_handlers() -> None:
   signal.signal(signal.SIGTERM, _handle_shutdown_signal)
 
 
-class _QuietSpinner:
-  def update(self, *args, **kwargs) -> None:
-    pass
-
-  def close(self, *args, **kwargs) -> None:
-    pass
-
-
 def ensure_vendor_runtime() -> None:
+  # verify-only: a hash-mismatched binary is quarantined, never replaced from
+  # the network — the updater restores the checked-in one
   try:
-    VendorMapdInstaller(_QuietSpinner()).check_and_download()
+    VendorMapdInstaller().verify()
   except Exception:
-    cloudlog.exception("iq_maps: vendor runtime install/download failed")
+    cloudlog.exception("iq_maps: vendor runtime verification failed")
 
 params = Params()
 mem_params = Params("/dev/shm/params") if platform.system() != "Darwin" else params
