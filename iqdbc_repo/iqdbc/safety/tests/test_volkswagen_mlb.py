@@ -5,6 +5,10 @@ from iqdbc.car.structs import CarParams
 from iqdbc.safety.tests.libsafety import libsafety_py
 import iqdbc.safety.tests.common as common
 from iqdbc.safety.tests.common import CANPackerSafety
+from iqdbc.car.volkswagen.values import VolkswagenSafetyFlags
+
+MAX_ACCEL = 2.0
+MIN_ACCEL = -2.95
 
 MSG_LH_EPS_03 = 0x9F    # RX from EPS, for driver steering torque
 MSG_ACC_01 = 0x109      # TX by OP, ACC acceleration request to the drivetrain coordinator

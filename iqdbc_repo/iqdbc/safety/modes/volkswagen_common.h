@@ -100,7 +100,7 @@ void can_set_checksum(CANPacket_t *packet);
 #define MSG_MOTOR_03    0x105U   // RX from ECU, for driver throttle input and brake switch status
 #define MSG_TSK_02      0x10CU   // RX from ECU, for ACC status from drivetrain coordinator
 #define MSG_ACC_05      0x10DU   // RX from radar, for ACC status
-#define MSG_ACC_01      0x109U   // RX from radar, for ACC status (Audi B8)
+#define MSG_ACC_01      0x109U   // TX by OP, ACC control instructions to the drivetrain coordinator
 
 static void volkswagen_common_init(void) {
   volkswagen_set_button_prev = false;

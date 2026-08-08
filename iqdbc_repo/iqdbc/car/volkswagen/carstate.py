@@ -675,9 +675,12 @@ class CarState(CarStateBase):
     else:
       ret.gearShifter = GearShifter.drive
 
-    # ACC okay but disabled (1), ACC ready (2), a radar visibility or other fault/disruption (6 or 7)
-    # currently regulating speed (3), driver accel override (4), brake only (5)
-    if self.CP.carFingerprint == CAR.PORSCHE_MACAN_MK1:
+    cruise_main_switch = bool(pt_cp.vl["LS_01"]["LS_Hauptschalter"])
+    if not self.CP.pcmCruise:
+      ret.cruiseState.available = cruise_main_switch
+      ret.cruiseState.enabled = False
+      ret.accFaulted = False
+    elif self.CP.carFingerprint == CAR.PORSCHE_MACAN_MK1:
       ret.cruiseState.available = ext_cp.vl["ACC_05"]["ACC_Status_ACC"] in (2, 3, 4, 5)
       ret.cruiseState.enabled = ext_cp.vl["ACC_05"]["ACC_Status_ACC"] in (3, 4, 5)
       ret.accFaulted = ext_cp.vl["ACC_05"]["ACC_Status_ACC"] in (6, 7)
@@ -687,11 +690,17 @@ class CarState(CarStateBase):
       ret.cruiseState.speed = ext_cp.vl["ACC_02"]["ACC_Wunschgeschw_02"] * CV.KPH_TO_MS
       ret.accFaulted = pt_cp.vl["TSK_02"]["TSK_Status"] in (3,)
 
+    ret.cruiseState.nonAdaptive = bool(pt_cp.vl["LS_01"]["LS_Limiter"])
+    if not self.CP.pcmCruise:
+      self.acc_stock_counters["ACC_01"] = int(ext_cp.vl["ACC_01"]["COUNTER"])
+      self.acc_stock_counters["ACC_02"] = int(ext_cp.vl["ACC_02"]["COUNTER"])
+      self.esp_hold_confirmation = bool(pt_cp.vl["ESP_02"]["ESP_Stillstandsflag"])
+
     self.parse_mlb_mqb_steering_state(ret, pt_cp)
     self._update_mlb_iq_alc_state(pt_cp)
 
     ret.brake = pt_cp.vl["ESP_05"]["ESP_Bremsdruck"] / 250.0
-    brake_pedal_pressed = bool(pt_cp.vl["Motor_03"]["MO_Fahrer_bremst"])
+    brake_pedal_pressed = bool(pt_cp.vl["Motor_03"]["MO_BLS"])
     brake_pressure_detected = bool(pt_cp.vl["ESP_05"]["ESP_Fahrer_bremst"])
     ret.brakePressed = brake_pedal_pressed or brake_pressure_detected
     ret.parkingBrake = bool(pt_cp.vl["Kombi_01"]["KBI_Handbremse"])
@@ -728,9 +737,10 @@ class CarState(CarStateBase):
 
     ret.cruiseState.standstill = self.CP.pcmCruise and self.esp_hold_confirmation
     ret.standstill = ret.vEgoRaw == 0
-    ret.cruiseFaultLateralMode = False
-    ret.lateralAvailable = ret.cruiseState.available
-    ret.blockPcmEnable = False
+    allow_lat_only = self._params.get_bool("AllowLateralWhenLongUnavailable") and self._params.get_bool("AolEnabled")
+    ret.cruiseFaultLateralMode = allow_lat_only and ret.accFaulted and cruise_main_switch
+    ret.lateralAvailable = ret.cruiseState.available or ret.cruiseFaultLateralMode
+    ret.blockPcmEnable = ret.cruiseFaultLateralMode
 
     self.cruise_faulted = ret.accFaulted
     self.frame += 1

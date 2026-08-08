@@ -91,6 +91,7 @@ class CarInterface(CarInterfaceBase):
       safety_configs = [get_safety_config(structs.CarParams.SafetyModel.volkswagenMlb)]
       ret.enableBsm = 0x30F in fingerprint[0]  # SWA_01
       ret.networkLocation = NetworkLocation.gateway
+      ret.transmissionType = TransmissionType.automatic
       ret.dashcamOnly = False
 
     elif ret.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO):
