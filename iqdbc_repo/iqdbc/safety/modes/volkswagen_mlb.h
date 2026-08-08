@@ -3,11 +3,41 @@
 #include "iqdbc/safety/declarations.h"
 #include "iqdbc/safety/modes/volkswagen_common.h"
 
+// -3.0 m/s^2 (VW_IQ_MIN_LONG_ACCEL, shared with MQB) faults the Audi Q5 ACC ECU and requires an
+// ignition cycle to clear; MLB needs its own, stricter floor instead of the shared MQB constant.
+#define VOLKSWAGEN_MLB_MIN_LONG_ACCEL -2950
+
+// The real ECU flags ACC_Sollbeschleunigung as a stuck/implausible sensor if it holds the exact
+// same value for too long, so the Python side dithers slightly around the inactive sentinel while
+// disengaged. Accept a small band around VW_IQ_INACTIVE_LONG_ACCEL (+/-15 raw = +/-0.075 m/s^2)
+// as "inactive" instead of requiring an exact match.
+#define VOLKSWAGEN_MLB_INACTIVE_ACCEL_TOLERANCE 15
+
+static bool volkswagen_mlb_long_accel_check(int desired_accel) {
+  int inactive_delta = desired_accel - VW_IQ_INACTIVE_LONG_ACCEL;
+  if ((inactive_delta >= -VOLKSWAGEN_MLB_INACTIVE_ACCEL_TOLERANCE) && (inactive_delta <= VOLKSWAGEN_MLB_INACTIVE_ACCEL_TOLERANCE)) {
+    return false;
+  }
+  // 0 m/s^2 ("hold current speed") is also accepted as an inactive/no-request value for MLB
+  if (desired_accel == 0) {
+    return false;
+  }
+  if (!controls_allowed) {
+    return true;
+  }
+  if (gas_pressed_prev && !volkswagen_allow_long_accel_with_gas_pressed) {
+    return true;
+  }
+  return (desired_accel > VW_IQ_MAX_LONG_ACCEL) || (desired_accel < VOLKSWAGEN_MLB_MIN_LONG_ACCEL);
+}
 
 static safety_config volkswagen_mlb_init(uint16_t param) {
   // Transmit of LS_01 is allowed on bus 0 and 2 to keep compatibility with gateway and camera integration
   static const CanMsg VOLKSWAGEN_MLB_STOCK_TX_MSGS[] = {{MSG_HCA_01, 0, 8, .check_relay = true}, {MSG_LDW_02, 0, 8, .check_relay = true},
                                                         {MSG_LS_01, 0, 4, .check_relay = false}, {MSG_LS_01, 2, 4, .check_relay = false}};
+
+  static const CanMsg VOLKSWAGEN_MLB_LONG_TX_MSGS[] = {{MSG_HCA_01, 0, 8, .check_relay = true}, {MSG_LDW_02, 0, 8, .check_relay = true},
+                                                       {MSG_ACC_01, 0, 8, .check_relay = true}, {MSG_ACC_02, 0, 8, .check_relay = true}};
 
   static RxCheck volkswagen_mlb_rx_checks[] = {
     // TODO: implement checksum validation
@@ -19,10 +49,17 @@ static safety_config volkswagen_mlb_init(uint16_t param) {
     {.msg = {{MSG_LS_01, 0, 4, 10U, .ignore_checksum = true, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
   };
 
-  SAFETY_UNUSED(param);
   volkswagen_common_init();
 
-  return BUILD_SAFETY_CFG(volkswagen_mlb_rx_checks, VOLKSWAGEN_MLB_STOCK_TX_MSGS);
+#ifdef ALLOW_DEBUG
+  volkswagen_longitudinal = GET_FLAG(param, FLAG_VOLKSWAGEN_LONG_CONTROL);
+  volkswagen_allow_long_accel_with_gas_pressed = GET_FLAG(param, FLAG_VOLKSWAGEN_ALLOW_LONG_ACCEL_WITH_GAS_PRESSED);
+#else
+  SAFETY_UNUSED(param);
+#endif
+
+  return volkswagen_longitudinal ? BUILD_SAFETY_CFG(volkswagen_mlb_rx_checks, VOLKSWAGEN_MLB_LONG_TX_MSGS) : \
+                                   BUILD_SAFETY_CFG(volkswagen_mlb_rx_checks, VOLKSWAGEN_MLB_STOCK_TX_MSGS);
 }
 
 static void volkswagen_mlb_rx_hook(const CANPacket_t *msg) {
@@ -44,6 +81,27 @@ static void volkswagen_mlb_rx_hook(const CANPacket_t *msg) {
     }
 
     if (msg->addr == MSG_LS_01) {
+      // If using openpilot longitudinal, the stock ACC coordinator is relayed out, so the stalk main
+      // switch is the only remaining source of truth. Enter controls on falling edge of Set or Resume.
+      // Signal: LS_01.LS_Hauptschalter
+      // Signal: LS_01.LS_Tip_Setzen
+      // Signal: LS_01.LS_Tip_Wiederaufnahme
+      if (volkswagen_longitudinal) {
+        acc_main_on = GET_BIT(msg, 12U);
+
+        bool set_button = GET_BIT(msg, 16U);
+        bool resume_button = GET_BIT(msg, 19U);
+        if ((volkswagen_set_button_prev && !set_button) || (volkswagen_resume_button_prev && !resume_button)) {
+          controls_allowed = acc_main_on;
+        }
+        volkswagen_set_button_prev = set_button;
+        volkswagen_resume_button_prev = resume_button;
+
+        if (!acc_main_on) {
+          controls_allowed = false;
+        }
+      }
+
       // Always exit controls on rising edge of Cancel
       // Signal: LS_01.LS_Abbrechen
       if (GET_BIT(msg, 13U)) {
@@ -52,10 +110,10 @@ static void volkswagen_mlb_rx_hook(const CANPacket_t *msg) {
     }
 
     // Signal: Motor_03.MO_Fahrpedalrohwert_01
-    // Signal: Motor_03.MO_Fahrer_bremst
+    // Signal: Motor_03.MO_BLS (bit 34) -- MO_Fahrer_bremst (bit 35) sticks/is unreliable on real MLB hardware
     if (msg->addr == MSG_MOTOR_03) {
       gas_pressed = msg->data[6] != 0U;
-      volkswagen_brake_pedal_switch = GET_BIT(msg, 35U);
+      volkswagen_brake_pedal_switch = GET_BIT(msg, 34U);
     }
 
     if (msg->addr == MSG_ESP_05) {
@@ -64,7 +122,7 @@ static void volkswagen_mlb_rx_hook(const CANPacket_t *msg) {
 
     brake_pressed = volkswagen_brake_pedal_switch || volkswagen_brake_pressure_detected;
 
-    if (msg->addr == MSG_TSK_02) {
+    if ((msg->addr == MSG_TSK_02) && !volkswagen_longitudinal) {
       // When using stock ACC, enter controls on rising edge of stock ACC engage, exit on disengage
       // Always exit controls on main switch off
       // Signal: TSK_02.TSK_Status
@@ -80,7 +138,7 @@ static void volkswagen_mlb_rx_hook(const CANPacket_t *msg) {
 
   if (msg->bus == 2U) {
     // TODO: See if there's a bus-agnostic TSK message we can use instead
-    if (msg->addr == MSG_ACC_05) {
+    if ((msg->addr == MSG_ACC_05) && !volkswagen_longitudinal) {
       // When using stock ACC, enter controls on rising edge of stock ACC engage, exit on disengage
       // Always exit controls on main switch off
       // Signal: ACC_05.ACC_Status_ACC
@@ -119,6 +177,17 @@ static bool volkswagen_mlb_tx_hook(const CANPacket_t *msg) {
     bool steer_req = (steer_status == 5) || (steer_status == 7);
 
     if (steer_torque_cmd_checks(desired_torque, steer_req, VOLKSWAGEN_MLB_STEERING_LIMITS)) {
+      tx = false;
+    }
+  }
+
+  // Safety check for ACC_01 acceleration request
+  // Signal: ACC_01.ACC_Sollbeschleunigung (acceleration in m/s^2, scale 0.005, offset -7.22)
+  // To avoid floating point math, scale upward and compare to pre-scaled safety m/s^2 boundaries
+  if (msg->addr == MSG_ACC_01) {
+    int desired_accel = ((((msg->data[4] & 0x07U) << 8) | msg->data[3]) * 5U) - 7220U;
+
+    if (volkswagen_mlb_long_accel_check(desired_accel)) {
       tx = false;
     }
   }

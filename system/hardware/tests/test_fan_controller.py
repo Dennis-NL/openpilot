@@ -42,6 +42,13 @@ class TestFanController:
     assert controller.update(100, True) == 100
 
   @pytest.mark.parametrize("controller_class", ALL_CONTROLLERS)
+  def test_max_cool(self, mocker, controller_class):
+    controller = patched_controller(mocker, controller_class)
+    self.wind_down(controller)
+    assert controller.update(80, True, True) == 100
+    assert controller.update(80, False, True) == 100
+
+  @pytest.mark.parametrize("controller_class", ALL_CONTROLLERS)
   def test_windup_speed(self, mocker, controller_class):
     controller = patched_controller(mocker, controller_class)
     self.wind_down(controller, True)

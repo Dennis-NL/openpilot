@@ -6,7 +6,11 @@ class FanController:
   def __init__(self) -> None:
     self.last_ignition = False
 
-  def update(self, cur_temp: float, ignition: bool) -> int:
+  def update(self, cur_temp: float, ignition: bool, max_cool: bool = False) -> int:
+    if max_cool:
+      self.last_ignition = ignition
+      return 100
+
     if cur_temp < 70.0:
       fan_pwr_out = 0
     elif cur_temp > 85.0:

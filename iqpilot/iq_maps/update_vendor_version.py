@@ -2,8 +2,10 @@
 """
 Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed under https://konn3kt.com/tos
 
-Maintainer utility: pin a new pfeiferj/mapd release tag and refresh the checked-in
-binary hash. Not used at runtime.
+Maintainer utility: pin a new mapd release tag and refresh the checked-in binary
+hash. Not used at runtime. Binaries come from the gitlvb teal/mapd CI (built
+against teal/gomsgq) — drop the artifact at third_party/mapd_pfeiferj/mapd, then
+run this so the hash pin moves in the same commit.
 """
 import argparse
 import os
