@@ -691,7 +691,7 @@ class CarState(CarStateBase):
     self._update_mlb_iq_alc_state(pt_cp)
 
     ret.brake = pt_cp.vl["ESP_05"]["ESP_Bremsdruck"] / 250.0
-    brake_pedal_pressed = bool(pt_cp.vl["Motor_03"]["MO_Fahrer_bremst"])
+    brake_pedal_pressed = bool(pt_cp.vl["Motor_03"]["MO_BLS"])
     brake_pressure_detected = bool(pt_cp.vl["ESP_05"]["ESP_Fahrer_bremst"])
     ret.brakePressed = brake_pedal_pressed or brake_pressure_detected
     ret.parkingBrake = bool(pt_cp.vl["Kombi_01"]["KBI_Handbremse"])
