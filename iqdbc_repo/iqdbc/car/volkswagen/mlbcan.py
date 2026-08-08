@@ -32,17 +32,41 @@ def create_acc_buttons_control(packer, bus, gra_stock_values, cancel=False, resu
   return packer.make_can_msg("LS_01", bus, values)
 
 
-def acc_control_value(main_switch_on, long_active, cruiseOverride):
-  return 0
+def acc_control_value(main_switch_on, acc_faulted, long_active):
+  if acc_faulted:
+    acc_control = 6
+  elif long_active:
+    acc_control = 3
+  elif main_switch_on:
+    acc_control = 2
+  else:
+    acc_control = 0
+
+  return acc_control
 
 
 def acc_hud_status_value(main_switch_on, acc_faulted, longActive, longOverride):
   return 0
 
 
-def create_acc_accel_control(packer, bus, acc_type, accel, acc_control, stopping, starting, esp_hold, comfortBand, jerkLimit):
-  values = {}
-  return [packer.make_can_msg("ACC_05", bus, values)]
+def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_control, stopping, starting, esp_hold):
+  commands = []
+
+  acc_01_values = {
+    "ACC_Status_ACC": acc_control,
+    "ACC_Sollbeschleunigung": accel if acc_enabled else 0,
+    "ACC_zul_Regelabw_unten": 0.2,
+    "ACC_zul_Regelabw_oben": 0.2,
+    "ACC_neg_Sollbeschl_Grad": 4.0 if acc_enabled else 0,
+    "ACC_pos_Sollbeschl_Grad": 4.0 if acc_enabled else 0,
+    "ACC_Anfahren": starting,
+    "ACC_Anhalten": stopping,
+    "ACC_Dynamik": 2,
+    "ACC_Minimale_Bremsung": stopping,
+  }
+  commands.append(packer.make_can_msg("ACC_01", bus, acc_01_values))
+
+  return commands
 
 
 def create_acc_hud_control(packer, bus, acc_hud_status, set_speed, leadDistance, distanceBars, fcw_alert, leadVisible, unavailable, decel, d_unresponsive):
