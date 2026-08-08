@@ -32,10 +32,10 @@ def create_acc_buttons_control(packer, bus, gra_stock_values, cancel=False, resu
   return packer.make_can_msg("LS_01", bus, values)
 
 
-def acc_control_value(main_switch_on, acc_faulted, long_active):
-  if acc_faulted:
+def acc_control_value(main_switch_on, long_active, cruiseOverride, accFaulted):
+  if accFaulted:
     acc_control = 6
-  elif long_active:
+  elif long_active or cruiseOverride:
     acc_control = 3
   elif main_switch_on:
     acc_control = 2
@@ -49,20 +49,22 @@ def acc_hud_status_value(main_switch_on, acc_faulted, longActive, longOverride):
   return 0
 
 
-def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_control, stopping, starting, esp_hold):
+def create_acc_accel_control(packer, bus, acc_type, accel, acc_control, stopping, starting, esp_hold,
+                              comfortBand, jerkLimit, eBrakeActive, sng_active=False):
   commands = []
+  acc_enabled = acc_control == 3
 
   acc_01_values = {
     "ACC_Status_ACC": acc_control,
     "ACC_Sollbeschleunigung": accel if acc_enabled else 0,
-    "ACC_zul_Regelabw_unten": 0.2,
-    "ACC_zul_Regelabw_oben": 0.2,
-    "ACC_neg_Sollbeschl_Grad": 4.0 if acc_enabled else 0,
-    "ACC_pos_Sollbeschl_Grad": 4.0 if acc_enabled else 0,
+    "ACC_zul_Regelabw_unten": comfortBand if acc_enabled else 0.2,
+    "ACC_zul_Regelabw_oben": comfortBand if acc_enabled else 0.2,
+    "ACC_neg_Sollbeschl_Grad": jerkLimit if acc_enabled else 4.0,
+    "ACC_pos_Sollbeschl_Grad": jerkLimit if acc_enabled else 4.0,
     "ACC_Anfahren": starting,
-    "ACC_Anhalten": stopping,
+    "ACC_Anhalten": stopping or eBrakeActive,
     "ACC_Dynamik": 2,
-    "ACC_Minimale_Bremsung": stopping,
+    "ACC_Minimale_Bremsung": stopping or eBrakeActive,
   }
   commands.append(packer.make_can_msg("ACC_01", bus, acc_01_values))
 
@@ -70,7 +72,20 @@ def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_cont
 
 
 def create_acc_hud_control(packer, bus, acc_hud_status, set_speed, leadDistance, distanceBars, fcw_alert, leadVisible, unavailable, decel, d_unresponsive):
-  values = {}
+  active = acc_hud_status == 3
+  chime = fcw_alert or d_unresponsive
+  values = {
+    "ACC_Status_Anzeige": acc_hud_status,
+    "ACC_Wunschgeschw_02": set_speed if set_speed < 250 else 327.04,
+    "ACC_Display_Prio": 1 if active else 0,
+    "ACC_Anzeige_Zeitluecke": 1 if active else 0,
+    "ACC_Gesetzte_Zeitluecke": distanceBars,
+    "ACC_Tachokranz": 1 if active else 0,
+    "ACC_Relevantes_Objekt": 2 if fcw_alert else (1 if active and leadVisible else 0),
+    "ACC_Status_Prim_Anz": 2 if fcw_alert else (1 if active and leadVisible else 0),
+    "ACC_Akustik": 1 if chime else 0,
+    "ACC_Abstandsindex": 1023 if active else 1022,
+  }
   return packer.make_can_msg("ACC_02", bus, values)
 
 def volkswagen_mlb_checksum(address: int, sig, d: bytearray) -> int:

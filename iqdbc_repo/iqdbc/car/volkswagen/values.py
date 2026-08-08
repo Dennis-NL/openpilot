@@ -204,6 +204,9 @@ class CarControllerParams:
         self.STEER_DRIVER_ALLOWANCE = 60  # Driver intervention threshold 0.6 Nm
         self.STEER_DELTA_UP = 9  # Max HCA reached in 0.66s (STEER_MAX / (50Hz * 0.66))
         self.STEER_DELTA_DOWN = 10  # Min HCA reached in 0.60s (STEER_MAX / (50Hz * 0.60))
+        # -3.0 faults the 2014 Audi Q5 ACC ECU (requires ignition cycle to clear); matches the
+        # safety firmware's VOLKSWAGEN_MLB_LONG_LIMITS.min_accel in volkswagen_mlb.h
+        self.ACCEL_MIN = -2.95
 
         if CP.carFingerprint == CAR.PORSCHE_MACAN_MK1:
           self.shifter_values = can_define.dv["Getriebe_03"]["GE_Waehlhebel"]
