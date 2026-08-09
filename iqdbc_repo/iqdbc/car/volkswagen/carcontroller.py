@@ -597,7 +597,8 @@ class CarController(CarControllerBase):
         acc_hud_status = self.CCS.acc_hud_status_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.longActive, CC.cruiseControl.override)
         set_speed = hud_control.setSpeed * CV.MS_TO_KPH
         decel = dVisual(self.CCS, CS)
-        hud_kwargs = {"hud_text": self._mlb_acc_hud_text(hud_control, set_speed)} if self.CCS is mlbcan else {}
+        hud_kwargs = {"hud_text": self._mlb_acc_hud_text(hud_control, set_speed),
+                      "desired_distance": max(8.0, CS.out.vEgo * hud_control.leadFollowTime)} if self.CCS is mlbcan else {}
         can_sends.append(self.CCS.create_acc_hud_control(self.packer_pt, self.CAN.pt, acc_hud_status, set_speed, leadDistance,
                                                          self.leadDistanceBars, fcw_alert, hud_control.leadVisible, self.unavailable,
                                                          decel, d_unresponsive, **hud_kwargs))

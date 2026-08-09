@@ -70,19 +70,23 @@ def create_acc_accel_control(packer, bus, accel, acc_control, stopping):
 
 
 def create_acc_hud_control(packer, bus, acc_hud_status, set_speed, leadDistance, distanceBars, fcw_alert, leadVisible,
-                           unavailable, decel, d_unresponsive, hud_text=0):
+                           unavailable, decel, d_unresponsive, hud_text=0, desired_distance=8.0):
   engaged = acc_hud_status in (3, 4)
   priodisp = 0 if fcw_alert else 1 if (acc_hud_status == 4 or decel or leadVisible) else 2 if (acc_hud_status in (3, 2)) else 0
   leadDistanceBars = distanceBars + 1 if distanceBars in (1, 2, 3) else 2
   # ACC_02.ACC_Abstandsindex is a 10-bit field, confirmed on a real MLB cluster: within the linear range
   # [1|1021], 1 = lead far away and 1021 = lead right in front (i.e. index counts DOWN as the lead closes in).
-  # 1022 = ACC off, 1023 = ACC on with no lead in front.
-  if acc_hud_status == 0:
+  # 1022 = openpilot not engaged (main switch off, standby, or fault), 1023 = engaged with no lead in front.
+  # The cluster colors this relative to the desired (speed x time-gap) distance, not an absolute meter count:
+  # at the desired distance the index sits near the middle of the range (~511, green); closer than desired
+  # pushes it up toward 1021 (red), farther than desired pushes it down toward 1 (gray).
+  if not engaged:
     acc_distance_index = 1022
   elif not leadVisible:
     acc_distance_index = 1023
   else:
-    acc_distance_index = max(1, min(1021, 1022 - round(leadDistance)))
+    distance_ratio = leadDistance / max(desired_distance, 1.0)
+    acc_distance_index = int(max(1, min(1021, round(511 * (2 - distance_ratio)))))
 
   values = {
     "ACC_Status_Anzeige": acc_hud_status,  # 0 off, 1 init, 2 standby, 3 active, 4 overridden, 5 shutdown reaction, 6/7 fault
