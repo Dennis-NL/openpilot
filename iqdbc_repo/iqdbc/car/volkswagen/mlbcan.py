@@ -3,9 +3,6 @@ from iqdbc.car.volkswagen.mqbcan import (volkswagen_mqb_meb_checksum, xor_checks
                                          acc_hud_status_value as mqb_acc_hud_status_value,
                                          create_lka_hud_control as mqb_create_lka_hud_control)
 
-# ACC_01.ACC_Sollbeschleunigung one increment above range max, "no acceleration request"
-ACC_INACTIVE_ACCEL = 3.01
-
 
 def create_hca_steering_control(packer, bus, apply_steer, HCA_Status):
   values = {
@@ -56,12 +53,12 @@ def create_acc_accel_control(packer, bus, accel, acc_control, stopping):
 
   acc_01_values = {
     "ACC_Status_ACC": acc_control,
-    "ACC_Sollbeschleunigung": accel if acc_enabled else ACC_INACTIVE_ACCEL,
+    "ACC_Sollbeschleunigung": accel if acc_enabled else 0,
     "ACC_zul_Regelabw_unten": 0.2,
     "ACC_zul_Regelabw_oben": 0.2,
-    "ACC_neg_Sollbeschl_Grad": 4.0 if acc_enabled else 0,
-    "ACC_pos_Sollbeschl_Grad": 4.0 if acc_enabled else 0,
-    "ACC_Dynamik": 3,
+    "ACC_neg_Sollbeschl_Grad": 3.0 if acc_enabled else 0,
+    "ACC_pos_Sollbeschl_Grad": 3.0 if acc_enabled else 0,
+    "ACC_Dynamik": 2,
     "ACC_Anhalten": stopping if acc_enabled else False,
     "ACC_Minimale_Bremsung": 0,
   }
