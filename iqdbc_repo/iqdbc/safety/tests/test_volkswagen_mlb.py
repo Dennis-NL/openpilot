@@ -8,7 +8,7 @@ from iqdbc.safety.tests.common import CANPackerSafety
 from iqdbc.car.volkswagen.values import VolkswagenSafetyFlags
 
 MAX_ACCEL = 2.0
-MIN_ACCEL = -3.5
+MIN_ACCEL = -2.95  # MLB has its own stricter floor (VOLKSWAGEN_MLB_MIN_LONG_ACCEL) to avoid faulting the Audi Q5 ACC ECU
 
 MSG_LH_EPS_03 = 0x9F    # RX from EPS, for driver steering torque
 MSG_ACC_01 = 0x109      # TX by OP, ACC acceleration request to the drivetrain coordinator
