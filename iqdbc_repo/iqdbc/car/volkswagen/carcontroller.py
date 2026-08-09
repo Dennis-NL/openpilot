@@ -621,20 +621,23 @@ class CarController(CarControllerBase):
         can_sends.append(self.CCS.filter_motor5(self.packer_pt, self.CAN.ext, CS.motor5_stock))
 
     gra_send_ready = self.CP.pcmCruise and CS.gra_stock_values["COUNTER"] != self.gra_acc_counter_last
+    stock_set_pressed = False
     if self.CP.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO):
       main_cruise_latching = not bool(CS.gra_stock_values["GRA_Typ_Hauptschalter"])
       stock_cancel_pressed = bool(CS.gra_stock_values["GRA_Abbrechen"] if main_cruise_latching else CS.gra_stock_values["GRA_Hauptschalter"])
     elif self.CP.flags & VolkswagenFlags.MLB:
       stock_cancel_pressed = bool(CS.gra_stock_values["LS_Abbrechen"])
+      stock_set_pressed = bool(CS.gra_stock_values["LS_Tip_Setzen"])
     else:
       stock_cancel_pressed = bool(CS.gra_stock_values["GRA_Abbrechen"])
 
     cancel_cmd = stock_cancel_pressed or CC.cruiseControl.cancel
     resume_cmd = CC.cruiseControl.resume or self._should_spam_mqb_a0_resume(CS, iq_mqb_acc_resume)
-    if gra_send_ready and (cancel_cmd or resume_cmd):
+    set_cmd = stock_set_pressed
+    if gra_send_ready and (cancel_cmd or resume_cmd or set_cmd):
       bus_send = self.CAN.aux if self.CP.flags & VolkswagenFlags.PQ else self.CAN.ext
       can_sends.append(self.CCS.create_acc_buttons_control(self.packer_pt, bus_send, CS.gra_stock_values,
-                                                           cancel=cancel_cmd, resume=resume_cmd))
+                                                           cancel=cancel_cmd, resume=resume_cmd, set_button=set_cmd))
 
     if self.CP.openpilotLongitudinalControl and self.CCS == pqcan and not blend_active:
       if self.frame % 3:

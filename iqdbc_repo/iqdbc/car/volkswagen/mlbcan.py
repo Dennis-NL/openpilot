@@ -36,6 +36,7 @@ def create_acc_buttons_control(packer, bus, gra_stock_values, cancel=False, resu
     "COUNTER": (gra_stock_values["COUNTER"] + 1) % 16,
     "LS_Abbrechen": cancel,
     "LS_Tip_Wiederaufnahme": resume,
+    "LS_Tip_Setzen": set_button,
   })
 
   return packer.make_can_msg("LS_01", bus, values)

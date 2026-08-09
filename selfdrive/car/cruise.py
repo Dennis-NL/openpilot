@@ -336,7 +336,18 @@ class VCruiseHelper(VCruiseHelperIQ):
 
   def initialize_v_cruise(self, CS, experimental_mode: bool, iq_dynamic_mode: bool) -> None:
     # initializing is handled by the PCM
-    if self.CP.pcmCruise or self.v_cruise_initialized:
+    if self.CP.pcmCruise:
+      return
+
+    # VW's standby (non-PCM) cruise has a dedicated SET button that should re-capture the literal
+    # current speed every time it's pressed, not just once per drive.
+    set_pressed = self.volkswagen_standby_set_speed and any(b.type == ButtonType.setCruise for b in CS.buttonEvents)
+    if self.v_cruise_initialized and not set_pressed:
+      return
+
+    if set_pressed:
+      self.v_cruise_kph = int(round(np.clip(CS.vEgo * CV.MS_TO_KPH, self.v_cruise_min, V_CRUISE_MAX)))
+      self.v_cruise_cluster_kph = self.v_cruise_kph
       return
 
     initial_experimental_mode = experimental_mode and not iq_dynamic_mode
