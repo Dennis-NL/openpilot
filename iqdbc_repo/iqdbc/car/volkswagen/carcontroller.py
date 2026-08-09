@@ -591,7 +591,8 @@ class CarController(CarControllerBase):
                                                          hud_control.leadVisible, hud_control.leadDistanceBars + 1, show_distance_bars,
                                                          CS.esp_hold_confirmation, distance, gap, fcw_alert, acc_hud_event, speed_limit))
       else:
-        leadDistance = min(8, hud_control.leadDistance) if hud_control.leadDistance != 0 else 0
+        leadDistance = hud_control.leadDistance if self.CCS is mlbcan else \
+          (min(8, hud_control.leadDistance) if hud_control.leadDistance != 0 else 0)
         self.leadDistanceBars = min(3, hud_control.leadDistanceBars)
         acc_hud_status = self.CCS.acc_hud_status_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.longActive, CC.cruiseControl.override)
         set_speed = hud_control.setSpeed * CV.MS_TO_KPH

@@ -73,20 +73,29 @@ def create_acc_hud_control(packer, bus, acc_hud_status, set_speed, leadDistance,
   engaged = acc_hud_status in (3, 4)
   priodisp = 0 if fcw_alert else 1 if (acc_hud_status == 4 or decel or leadVisible) else 2 if (acc_hud_status in (3, 2)) else 0
   leadDistanceBars = distanceBars + 1 if distanceBars in (1, 2, 3) else 2
+  # ACC_02.ACC_Abstandsindex is a 10-bit field, confirmed on a real MLB cluster: within the linear range
+  # [1|1021], 1 = lead far away and 1021 = lead right in front (i.e. index counts DOWN as the lead closes in).
+  # 1022 = ACC off, 1023 = ACC on with no lead in front.
+  if acc_hud_status == 0:
+    acc_distance_index = 1022
+  elif not leadVisible:
+    acc_distance_index = 1023
+  else:
+    acc_distance_index = max(1, min(1021, 1022 - round(leadDistance)))
 
   values = {
-    "ACC_Status_Anzeige": acc_hud_status,
-    "ACC_Wunschgeschw_02": set_speed if set_speed < 250 else 327.36,
-    "ACC_Gesetzte_Zeitluecke": leadDistanceBars,
-    "ACC_Anzeige_Zeitluecke": 1 if engaged else 0,
-    "ACC_Tachokranz": 1 if engaged else 0,
-    "ACC_Display_Prio": priodisp,
-    "ACC_Abstandsindex": leadDistance if leadVisible else 0,
+    "ACC_Status_Anzeige": acc_hud_status,  # 0 off, 1 init, 2 standby, 3 active, 4 overridden, 5 shutdown reaction, 6/7 fault
+    "ACC_Wunschgeschw_02": set_speed if set_speed < 250 else 327.36,  # 327.36 (raw 1023) = "no display"
+    "ACC_Gesetzte_Zeitluecke": leadDistanceBars,  # 0 no display, 1-5 = time-gap bar 1 through 5
+    "ACC_Anzeige_Zeitluecke": 1 if engaged else 0,  # 0 gap bars not requested, 1 requested
+    "ACC_Tachokranz": 1 if engaged else 0,          # 0 speedo ring not lit, 1 lit
+    "ACC_Display_Prio": priodisp,  # 0 highest prio, 1 medium, 2 low, 3 none
+    "ACC_Abstandsindex": acc_distance_index,
     "ACC_Relevantes_Objekt": 2 if fcw_alert else (1 if leadVisible else 0),  # lead car: 1 green, 2 red, 0 off
-    "ACC_Status_Prim_Anz": 2 if fcw_alert else (1 if engaged else 0),        # ACC symbol: 1 green, 2 red, 0 off
-    "ACC_Optischer_Fahrerhinweis": 1 if fcw_alert else 0,
-    "ACC_Akustik": 1 if (fcw_alert or d_unresponsive) else 0,
-    "ACC_Texte_Primaeranz": hud_text,
+    "ACC_Status_Prim_Anz": 2 if fcw_alert else (1 if engaged else 0),        # ACC symbol: 1 green, 2 red, 3 yellow, 0 off
+    "ACC_Optischer_Fahrerhinweis": 1 if fcw_alert else 0, # 0 = off, 1 = on
+    "ACC_Akustik": 1 if (fcw_alert or d_unresponsive) else 0,  # 0 none, 1 high prio, 2 low prio, 3 high prio continuous
+    "ACC_Texte_Primaeranz": hud_text,  # primary HUD message text code, e.g. 10 "ACC ready", 53 "ACC off" (see DBC VAL_ for full list)
   }
 
   return packer.make_can_msg("ACC_02", bus, values)
