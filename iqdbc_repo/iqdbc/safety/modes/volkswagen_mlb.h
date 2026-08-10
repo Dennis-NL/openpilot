@@ -7,8 +7,19 @@
 // ignition cycle to clear; MLB needs its own, stricter floor instead of the shared MQB constant.
 #define VOLKSWAGEN_MLB_MIN_LONG_ACCEL -2950
 
+// The real ECU flags ACC_Sollbeschleunigung as a stuck/implausible sensor if it holds the exact
+// same value for too long, so the Python side dithers slightly around the inactive sentinel while
+// disengaged. Accept a small band around VW_IQ_INACTIVE_LONG_ACCEL (+/-15 raw = +/-0.075 m/s^2)
+// as "inactive" instead of requiring an exact match.
+#define VOLKSWAGEN_MLB_INACTIVE_ACCEL_TOLERANCE 15
+
 static bool volkswagen_mlb_long_accel_check(int desired_accel) {
-  if (desired_accel == VW_IQ_INACTIVE_LONG_ACCEL) {
+  int inactive_delta = desired_accel - VW_IQ_INACTIVE_LONG_ACCEL;
+  if ((inactive_delta >= -VOLKSWAGEN_MLB_INACTIVE_ACCEL_TOLERANCE) && (inactive_delta <= VOLKSWAGEN_MLB_INACTIVE_ACCEL_TOLERANCE)) {
+    return false;
+  }
+  // 0 m/s^2 ("hold current speed") is also accepted as an inactive/no-request value for MLB
+  if (desired_accel == 0) {
     return false;
   }
   if (!controls_allowed) {
