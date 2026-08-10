@@ -39,9 +39,19 @@ def create_acc_buttons_control(packer, bus, gra_stock_values, cancel=False, resu
   return packer.make_can_msg("LS_01", bus, values)
 
 
-def acc_control_value(main_switch_on, long_active, cruiseOverride, accFaulted):
-  # ACC_01.ACC_Status_ACC uses the same enum as MQB ACC_06: 0 off, 2 standby, 3 active, 4 driver override, 6 fault
-  return mqb_acc_control_value(main_switch_on, long_active, cruiseOverride, accFaulted)
+def acc_control_value(main_switch_on, acc_faulted, cruiseOverride, long_active):
+  if cruiseOverride:
+    acc_control = 4
+  elif acc_faulted:
+    acc_control = 6
+  elif long_active:
+    acc_control = 3
+  elif main_switch_on:
+    acc_control = 2
+  else:
+    acc_control = 0
+
+  return acc_control
 
 
 def acc_hud_status_value(main_switch_on, acc_faulted, longActive, longOverride):
