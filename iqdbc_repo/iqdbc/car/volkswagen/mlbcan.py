@@ -80,7 +80,6 @@ def create_acc_hud_control(packer, bus, acc_hud_status, set_speed, leadDistance,
                            unavailable, decel, d_unresponsive, hud_text=0, desired_distance=8.0):
   engaged = acc_hud_status in (3, 4)
   priodisp = 0 if fcw_alert else 1 if (acc_hud_status == 4 or decel or leadVisible) else 2 if (acc_hud_status in (3, 2)) else 0
-  leadDistanceBars = distanceBars + 1 if distanceBars in (1, 2, 3) else 2
   if not engaged:
     acc_distance_index = 1022
   elif not leadVisible:
@@ -92,7 +91,7 @@ def create_acc_hud_control(packer, bus, acc_hud_status, set_speed, leadDistance,
   values = {
     "ACC_Status_Anzeige": acc_hud_status,  # 0 off, 1 init, 2 standby, 3 active, 4 overridden, 5 shutdown reaction, 6/7 fault
     "ACC_Wunschgeschw_02": set_speed if set_speed < 250 else 327.36,  # 327.36 (raw 1023) = "no display"
-    "ACC_Gesetzte_Zeitluecke": leadDistanceBars,  # 0 no display, 1-5 = time-gap bar 1 through 5
+    "ACC_Gesetzte_Zeitluecke": distanceBars,  # 1 aggressive, 2 standard, 3 relaxed
     "ACC_Anzeige_Zeitluecke": 1 if engaged else 0,  # 0 gap bars not requested, 1 requested
     "ACC_Tachokranz": 1 if engaged else 0,          # 0 speedo ring not lit, 1 lit
     "ACC_Display_Prio": priodisp,  # 0 highest prio, 1 medium, 2 low, 3 none
