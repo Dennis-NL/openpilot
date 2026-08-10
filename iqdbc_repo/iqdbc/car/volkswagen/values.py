@@ -205,8 +205,6 @@ class CarControllerParams:
         self.STEER_DELTA_UP = 9  # Max HCA reached in 0.66s (STEER_MAX / (50Hz * 0.66))
         self.STEER_DELTA_DOWN = 10  # Min HCA reached in 0.60s (STEER_MAX / (50Hz * 0.60))
         self.ACC_HUD_TEXT_STEP = int(2.0 / DT_CTRL)  # ACC_02 primary display text dwell time
-        # Stricter MIN ACCEL for B8 MLB otherwise faults
-        self.ACCEL_MIN = -2.95
 
         if CP.carFingerprint == CAR.PORSCHE_MACAN_MK1:
           self.shifter_values = can_define.dv["Getriebe_03"]["GE_Waehlhebel"]
