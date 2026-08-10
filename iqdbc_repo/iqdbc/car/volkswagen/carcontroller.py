@@ -248,6 +248,7 @@ class CarController(CarControllerBase):
     self.mlb_hud_text = 0
     self.mlb_hud_text_frame = 0
     self.mlb_set_speed_last = 0
+    self.mlb_lead_distance_bars_last = None
     self.speed_limit_last = 0
     self.speed_limit_changed_timer = 0
     self.blinkerActive = None
@@ -285,7 +286,10 @@ class CarController(CarControllerBase):
 
   def _mlb_acc_hud_text(self, hud_control, set_speed: float) -> int:
     # ACC_02 primary display text, briefly surfaced on a follow distance or set speed change
-    if hud_control.leadDistanceBars != self.lead_distance_bars_last:
+    # Uses its own last-seen tracker rather than self.lead_distance_bars_last, since that one is
+    # updated every frame (for MEB's distance_bar_frame) while this only runs every ACC_HUD_STEP
+    # frames -- comparing against it would often see the change already "caught up" and miss it.
+    if hud_control.leadDistanceBars != self.mlb_lead_distance_bars_last:
       self.mlb_hud_text_frame = self.frame
       self.mlb_hud_text = self.CCP.ACC_HUD_TEXT_DISTANCE.get(hud_control.leadDistanceBars, self.CCP.ACC_HUD_TEXTS["none"])
     elif set_speed != self.mlb_set_speed_last and hud_control.speedVisible:
@@ -293,6 +297,7 @@ class CarController(CarControllerBase):
       self.mlb_hud_text = self.CCP.ACC_HUD_TEXTS["setSpeed"]
     elif self.frame - self.mlb_hud_text_frame >= self.CCP.ACC_HUD_TEXT_STEP:
       self.mlb_hud_text = self.CCP.ACC_HUD_TEXTS["none"]
+    self.mlb_lead_distance_bars_last = hud_control.leadDistanceBars
     self.mlb_set_speed_last = set_speed
     return self.mlb_hud_text
 
