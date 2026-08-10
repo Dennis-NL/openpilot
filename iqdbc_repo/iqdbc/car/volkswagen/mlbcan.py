@@ -86,7 +86,7 @@ def create_acc_hud_control(packer, bus, acc_hud_status, set_speed, leadDistance,
     acc_distance_index = 1023
   else:
     distance_ratio = leadDistance / max(desired_distance, 1.0)
-    acc_distance_index = int(max(1, min(1021, round(511 * (2 - distance_ratio)))))
+    acc_distance_index = int(max(1, min(1021, round(490 * (2 - distance_ratio)))))
 
   values = {
     "ACC_Status_Anzeige": acc_hud_status,  # 0 off, 1 init, 2 standby, 3 active, 4 overridden, 5 shutdown reaction, 6/7 fault
