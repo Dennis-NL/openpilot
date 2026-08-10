@@ -53,7 +53,7 @@ def create_acc_accel_control(packer, bus, accel, acc_control, stopping):
 
   acc_01_values = {
     "ACC_Status_ACC": acc_control,
-    "ACC_Sollbeschleunigung": accel if acc_enabled else 0,
+    "ACC_Sollbeschleunigung": accel if acc_enabled else 3.01,
     "ACC_zul_Regelabw_unten": 0.2 if acc_enabled else 0,
     "ACC_zul_Regelabw_oben": 0.2 if acc_enabled else 0,
     "ACC_neg_Sollbeschl_Grad": 4.0 if acc_enabled else 0,
