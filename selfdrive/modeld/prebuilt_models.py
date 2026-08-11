@@ -29,10 +29,12 @@ def _file_sha256(path: Path) -> str:
 @functools.lru_cache(maxsize=1)
 def _tinygrad_digest() -> str:
   h = hashlib.sha256()
-  # mirror the SConscript glob: no hidden files/dirs (also excludes .git, which differs per clone), no pycache
+  # mirror the SConscript glob: no hidden files/dirs (also excludes .git, which differs per clone), no pycache.
+  # 'weights' holds untracked/gitignored model weights (e.g. iqvd yolov8n .safetensors) present on dev machines
+  # but absent from a clean CI/device clone — hashing them makes the signature unreproducible (false STALE).
   def _included(p: Path) -> bool:
     rel = p.relative_to(TINYGRAD_DIR).parts
-    return p.is_file() and '__pycache__' not in rel and not any(part.startswith('.') for part in rel)
+    return p.is_file() and '__pycache__' not in rel and 'weights' not in rel and not any(part.startswith('.') for part in rel)
   files = sorted(p for p in TINYGRAD_DIR.rglob('*') if _included(p))
   for p in files:
     h.update(str(p.relative_to(BASEDIR)).encode())

@@ -85,8 +85,13 @@ def affine_irq(val, action):
 @lru_cache
 def get_device_type():
   # lru_cache and cache can cause memory leaks when used in classes
-  with open("/sys/firmware/devicetree/base/model") as f:
-    model = f.read().strip('\x00')
+  try:
+    with open("/sys/firmware/devicetree/base/model") as f:
+      model = f.read().strip('\x00')
+  except FileNotFoundError:
+    # off-device (e.g. the prebuilt build container fakes /TICI but has no
+    # devicetree); import must not crash. Not a real device type.
+    return "unknown"
   return model.split('comma ')[-1]
 
 class Tici(HardwareBase):
