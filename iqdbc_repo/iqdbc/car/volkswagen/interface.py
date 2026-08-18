@@ -93,6 +93,8 @@ class CarInterface(CarInterfaceBase):
       ret.networkLocation = NetworkLocation.gateway
       ret.transmissionType = TransmissionType.automatic
       ret.dashcamOnly = False
+      if angle_lat_enabled:
+        ret.flags |= VolkswagenFlagsIQ.IQ_LVBS_ALC_MODULE.value
 
     elif ret.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO):
       if ret.flags & VolkswagenFlags.MEB:

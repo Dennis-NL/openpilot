@@ -15,6 +15,36 @@ def create_hca_steering_control(packer, bus, apply_steer, HCA_Status):
   return packer.make_can_msg("HCA_01", bus, values)
 
 
+ALC_ANGLE_HCA_STATUS = 8
+
+
+def create_alc_angle_control(packer, bus, angle_deg):
+  # Private tunnel to the standalone ALC panda module: status 8 marks this
+  # HCA_01 as carrying a requested steering-wheel angle instead of torque.
+  # Bits 51-63 are the only ones the MLB HCA_01 DBC leaves undefined, so the
+  # angle (0.1 deg/bit magnitude, 12 bit) plus a sign bit are packed there by
+  # hand after the packer builds the named-signal fields and checksum.
+  values = {
+    "HCA_01_Status_HCA": ALC_ANGLE_HCA_STATUS,
+    "HCA_01_Vib_Freq": 18,
+    "HCA_01_Sendestatus": 0,
+  }
+  addr, dat, bus = packer.make_can_msg("HCA_01", bus, values)
+  dat = bytearray(dat)
+
+  angle_raw = min(int(round(abs(angle_deg) * 10)), 0xFFF)
+  sign = 1 if angle_deg < 0 else 0
+  dat[6] = (dat[6] & 0x07) | ((angle_raw & 0x1F) << 3)
+  dat[7] = ((angle_raw >> 5) & 0x7F) | (sign << 7)
+
+  msg = packer.dbc.addr_to_msg[addr]
+  sig_checksum = msg.sigs["CHECKSUM"]
+  from iqdbc.can.packer import set_value
+  set_value(dat, sig_checksum, sig_checksum.calc_checksum(addr, sig_checksum, dat))
+
+  return addr, bytes(dat), bus
+
+
 def create_lka_hud_control(packer, bus, ldw_stock_values, enabled, steering_pressed, hud_alert, hud_control,
                            entering=False, special_mode=False, special_active=False):
   return mqb_create_lka_hud_control(packer, bus, ldw_stock_values, enabled, steering_pressed, hud_alert, hud_control,
