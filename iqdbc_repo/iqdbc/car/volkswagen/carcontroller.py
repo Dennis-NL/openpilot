@@ -417,15 +417,14 @@ class CarController(CarControllerBase):
 
         self.eps_timer_soft_disable_alert = self.hca_frame_timer_running > self.CCP.STEER_TIME_ALERT / DT_CTRL
         self.apply_torque_last = apply_torque
-        if self.CP.flags & VolkswagenFlags.MLB and self.CCS == mlbcan and CC.enabled and CC.latActive:
-          # This car's EPS doesn't accept the normal torque-based HCA_01 path,
-          # so route the desired angle to the standalone ALC panda module instead
-          # via a private HCA_01 status (see mlbcan.create_alc_angle_control).
-          # actuators.steeringAngleDeg is the lateral controller's own computed
-          # target angle (set unconditionally in controlsd.py regardless of
-          # steerControlType) - use that directly instead of deriving one.
-          can_sends.append(mlbcan.create_alc_angle_control(self.packer_pt, self._pt_tx_bus, actuators.steeringAngleDeg))
-        elif not (AngleLateralControl and self.CCS in (mqbcan, pqcan, mlbcan)):
+        # This car's EPS doesn't accept the normal torque-based HCA_01 path, so
+        # the desired angle is routed to the standalone ALC panda module instead
+        # via a private HCA_01 status (see mlbcan.create_alc_angle_control). The
+        # actual send happens after iq_lvbs_alc.update_vw_alc() below, since that
+        # private hook also queues its own HCA_01 frame this cycle and whichever
+        # one lands last on the wire is what the ALC module ends up seeing.
+        self.mlb_alc_active = bool(self.CP.flags & VolkswagenFlags.MLB and self.CCS == mlbcan and CC.enabled and CC.latActive)
+        if not self.mlb_alc_active and not (AngleLateralControl and self.CCS in (mqbcan, pqcan, mlbcan)):
           can_sends.append(self.CCS.create_hca_steering_control(self.packer_pt, self._pt_tx_bus, output_torque, self.HCA_Status))
 
       if self.CP.flags & VolkswagenFlags.STOCK_HCA_PRESENT and self.CCS == mqbcan:
@@ -435,6 +434,8 @@ class CarController(CarControllerBase):
         can_sends.append(self.CCS.create_eps_update(self.packer_pt, self.CAN.cam, CS.eps_stock_values, ea_simulated_torque))
 
     iq_lvbs_alc.update_vw_alc(self, CC, CS, actuators, can_sends, apply_torque)
+    if getattr(self, "mlb_alc_active", False):
+      can_sends.append(mlbcan.create_alc_angle_control(self.packer_pt, self._pt_tx_bus, actuators.steeringAngleDeg))
     if self.frame % self.CCP.STEER_STEP == 0:
       iq_lvbs_alc.append_private_apd(self, CC_IQ, can_sends)
 
