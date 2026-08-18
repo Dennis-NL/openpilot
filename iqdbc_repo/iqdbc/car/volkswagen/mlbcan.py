@@ -25,31 +25,21 @@ def create_alc_angle_control(packer, bus, angle_deg):
   # HCA_01 is a real, gateway-routed message - a fabricated CAN ID (e.g. a
   # PLA_01-shaped frame on the car bus) gets silently dropped by the vehicle
   # gateway since it has no routing rule for it, so this has to ride inside
-  # an existing message the gateway already forwards. Bits 51-63 are the only
-  # ones the MLB HCA_01 DBC leaves undefined, so the angle (0.1 deg/bit
-  # magnitude, 12 bit) plus a sign bit are packed there by hand after the
-  # packer builds the named-signal fields and checksum.
+  # an existing message the gateway already forwards. The angle rides in
+  # HCA_01_LM_Offset/LM_OffSign (the torque fields, 1 deg/bit, +-511 deg) -
+  # NOT bytes 6-7, which a Cabana capture showed carrying real non-zero
+  # content from IQ's own private ALC path, not free bits.
+  if not math.isfinite(angle_deg):
+    angle_deg = 0.0
+  angle_raw = min(int(round(abs(angle_deg))), 511)
   values = {
     "HCA_01_Status_HCA": ALC_ANGLE_HCA_STATUS,
+    "HCA_01_LM_Offset": angle_raw,
+    "HCA_01_LM_OffSign": 1 if angle_deg < 0 else 0,
     "HCA_01_Vib_Freq": 18,
     "HCA_01_Sendestatus": 0,
   }
-  addr, dat, bus = packer.make_can_msg("HCA_01", bus, values)
-  dat = bytearray(dat)
-
-  if not math.isfinite(angle_deg):
-    angle_deg = 0.0
-  angle_raw = min(int(round(abs(angle_deg) * 10)), 0xFFF)
-  sign = 1 if angle_deg < 0 else 0
-  dat[6] = (dat[6] & 0x07) | ((angle_raw & 0x1F) << 3)
-  dat[7] = ((angle_raw >> 5) & 0x7F) | (sign << 7)
-
-  msg = packer.dbc.addr_to_msg[addr]
-  sig_checksum = msg.sigs["CHECKSUM"]
-  from iqdbc.can.packer import set_value
-  set_value(dat, sig_checksum, sig_checksum.calc_checksum(addr, sig_checksum, dat))
-
-  return addr, bytes(dat), bus
+  return packer.make_can_msg("HCA_01", bus, values)
 
 
 def create_lka_hud_control(packer, bus, ldw_stock_values, enabled, steering_pressed, hud_alert, hud_control,
