@@ -435,6 +435,11 @@ class CarController(CarControllerBase):
 
     iq_lvbs_alc.update_vw_alc(self, CC, CS, actuators, can_sends, apply_torque)
     if getattr(self, "mlb_alc_active", False):
+      # iq_lvbs_alc also writes its own HCA_01 when its private angle-control
+      # path is enabled, with an encoding we don't control and that stomps on
+      # ours. Strip any HCA_01 frame it just queued so only our own tunneled
+      # frame reaches the standalone ALC module this cycle.
+      can_sends[:] = [m for m in can_sends if m[0] != 294]  # 294 = 0x126 HCA_01
       can_sends.append(mlbcan.create_alc_angle_control(self.packer_pt, self._pt_tx_bus, actuators.steeringAngleDeg))
     if self.frame % self.CCP.STEER_STEP == 0:
       iq_lvbs_alc.append_private_apd(self, CC_IQ, can_sends)
