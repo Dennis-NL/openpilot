@@ -16,36 +16,27 @@ def create_hca_steering_control(packer, bus, apply_steer, HCA_Status):
   return packer.make_can_msg("HCA_01", bus, values)
 
 
-ALC_ANGLE_HCA_STATUS = 8
+ALC_PLA_01_ADDR = 0x130
 
 
 def create_alc_angle_control(packer, bus, angle_deg):
-  # Private tunnel to the standalone ALC panda module: status 8 marks this
-  # HCA_01 as carrying a requested steering-wheel angle instead of torque.
-  # Bits 51-63 are the only ones the MLB HCA_01 DBC leaves undefined, so the
-  # angle (0.1 deg/bit magnitude, 12 bit) plus a sign bit are packed there by
-  # hand after the packer builds the named-signal fields and checksum.
-  values = {
-    "HCA_01_Status_HCA": ALC_ANGLE_HCA_STATUS,
-    "HCA_01_Vib_Freq": 18,
-    "HCA_01_Sendestatus": 0,
-  }
-  addr, dat, bus = packer.make_can_msg("HCA_01", bus, values)
-  dat = bytearray(dat)
-
+  # Private tunnel to the standalone ALC panda module: a PLA_01-shaped frame
+  # sent directly by OP on the car bus. 0x130 never appears there in stock
+  # traffic (the module is the sole real source of PLA_01, and only on the
+  # EPS-side bus), so this can't collide with anything real or with IQ's own
+  # HCA_01-based control path. Angle uses the same 0.1 deg/bit raw scale as
+  # LWI_Lenkradwinkel, matching what the module expects (PLA_LW_Soll's bit
+  # position but not its native 0.04375 deg/bit resolution).
   if not math.isfinite(angle_deg):
     angle_deg = 0.0
-  angle_raw = min(int(round(abs(angle_deg) * 10)), 0xFFF)
+  angle_raw = min(int(round(abs(angle_deg) * 10)), 0x1FFF)
   sign = 1 if angle_deg < 0 else 0
-  dat[6] = (dat[6] & 0x07) | ((angle_raw & 0x1F) << 3)
-  dat[7] = ((angle_raw >> 5) & 0x7F) | (sign << 7)
 
-  msg = packer.dbc.addr_to_msg[addr]
-  sig_checksum = msg.sigs["CHECKSUM"]
-  from iqdbc.can.packer import set_value
-  set_value(dat, sig_checksum, sig_checksum.calc_checksum(addr, sig_checksum, dat))
+  dat = bytearray(8)
+  dat[2] = angle_raw & 0xFF
+  dat[3] = ((angle_raw >> 8) & 0x1F) | (sign << 7)
 
-  return addr, bytes(dat), bus
+  return ALC_PLA_01_ADDR, bytes(dat), bus
 
 
 def create_lka_hud_control(packer, bus, ldw_stock_values, enabled, steering_pressed, hud_alert, hud_control,
