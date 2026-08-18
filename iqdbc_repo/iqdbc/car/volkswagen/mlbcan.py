@@ -16,17 +16,19 @@ def create_hca_steering_control(packer, bus, apply_steer, HCA_Status):
   return packer.make_can_msg("HCA_01", bus, values)
 
 
-ALC_PLA_01_ADDR = 0x130
+ALC_01_ADDR = 0x130
 
 
 def create_alc_angle_control(packer, bus, angle_deg):
-  # Private tunnel to the standalone ALC panda module: a PLA_01-shaped frame
-  # sent directly by OP on the car bus. 0x130 never appears there in stock
-  # traffic (the module is the sole real source of PLA_01, and only on the
-  # EPS-side bus), so this can't collide with anything real or with IQ's own
-  # HCA_01-based control path. Angle uses the same 0.1 deg/bit raw scale as
-  # LWI_Lenkradwinkel, matching what the module expects (PLA_LW_Soll's bit
-  # position but not its native 0.04375 deg/bit resolution).
+  # Private tunnel to the standalone ALC panda module: an ALC_01 frame (same
+  # 0x130 address as the real PLA_01, named separately here since it's our own
+  # private message, not the OEM one) sent directly by OP on the car bus.
+  # 0x130 never appears there in stock traffic (the module is the sole real
+  # source of PLA_01, and only on the EPS-side bus), so this can't collide
+  # with anything real or with IQ's own HCA_01-based control path. Angle uses
+  # the same 0.1 deg/bit raw scale as LWI_Lenkradwinkel, matching what the
+  # module expects (PLA_LW_Soll's bit position but not its native 0.04375
+  # deg/bit resolution).
   if not math.isfinite(angle_deg):
     angle_deg = 0.0
   angle_raw = min(int(round(abs(angle_deg) * 10)), 0x1FFF)
@@ -36,7 +38,7 @@ def create_alc_angle_control(packer, bus, angle_deg):
   dat[2] = angle_raw & 0xFF
   dat[3] = ((angle_raw >> 8) & 0x1F) | (sign << 7)
 
-  return ALC_PLA_01_ADDR, bytes(dat), bus
+  return ALC_01_ADDR, bytes(dat), bus
 
 
 def create_lka_hud_control(packer, bus, ldw_stock_values, enabled, steering_pressed, hud_alert, hud_control,
