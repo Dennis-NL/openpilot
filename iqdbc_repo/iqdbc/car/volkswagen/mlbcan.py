@@ -1,3 +1,4 @@
+import math
 from iqdbc.car.volkswagen.mqbcan import (volkswagen_mqb_meb_checksum, xor_checksum,
                                          acc_control_value as mqb_acc_control_value,
                                          acc_hud_status_value as mqb_acc_hud_status_value,
@@ -32,6 +33,8 @@ def create_alc_angle_control(packer, bus, angle_deg):
   addr, dat, bus = packer.make_can_msg("HCA_01", bus, values)
   dat = bytearray(dat)
 
+  if not math.isfinite(angle_deg):
+    angle_deg = 0.0
   angle_raw = min(int(round(abs(angle_deg) * 10)), 0xFFF)
   sign = 1 if angle_deg < 0 else 0
   dat[6] = (dat[6] & 0x07) | ((angle_raw & 0x1F) << 3)
