@@ -369,6 +369,16 @@ class CarController(CarControllerBase):
         can_sends.append(self.CCS.create_steering_control(self.packer_pt, self.CAN.pt, apply_curvature, hca_enabled, steering_power))
         self.apply_curvature_last = apply_curvature
         self.steering_power_last = steering_power
+      elif self.CCS == mlbcan:
+        # This car's EPS doesn't accept the normal torque-based HCA_01 path, so
+        # MLB never runs the torque block below or touches create_hca_steering_control
+        # at all - it's a fully separate branch, not just a guarded call, so there's
+        # no shared state (HCA_Status, apply_torque, timers) to get confused about.
+        # Status flips between ALC_ANGLE (8, with an angle) and READY (3, no
+        # request). See mlbcan.create_alc_angle_control for why the angle isn't in
+        # HCA_01_LM_Offset/Sign (those are torque-checked by panda safety).
+        self.mlb_alc_active = bool(CC.enabled and CC.latActive)
+        can_sends.append(mlbcan.create_alc_angle_control(self.packer_pt, self._pt_tx_bus, self.mlb_alc_active, actuators.steeringAngleDeg))
       else:
         if CC.latActive and not AngleLateralControl:
           torque_scale = self._get_mqb_steering_torque_scale(CS.out.vEgo, iq_mqb_steering_lockout)
@@ -417,15 +427,7 @@ class CarController(CarControllerBase):
 
         self.eps_timer_soft_disable_alert = self.hca_frame_timer_running > self.CCP.STEER_TIME_ALERT / DT_CTRL
         self.apply_torque_last = apply_torque
-        # This car's EPS doesn't accept the normal torque-based HCA_01 path, so
-        # MLB always sends its own tunneled HCA_01 instead (never the torque
-        # path below, never iq_lvbs_alc's HCA_01) - status flips between
-        # ALC_ANGLE (8, with an angle) and READY (3, no request) the same way
-        # the normal torque path flips between statuses. See
-        # mlbcan.create_alc_angle_control for why the angle isn't in
-        # HCA_01_LM_Offset/Sign (those are torque-checked by panda safety).
-        self.mlb_alc_active = bool(self.CP.flags & VolkswagenFlags.MLB and self.CCS == mlbcan and CC.enabled and CC.latActive)
-        if self.CCS != mlbcan and not (AngleLateralControl and self.CCS in (mqbcan, pqcan, mlbcan)):
+        if not (AngleLateralControl and self.CCS in (mqbcan, pqcan, mlbcan)):
           can_sends.append(self.CCS.create_hca_steering_control(self.packer_pt, self._pt_tx_bus, output_torque, self.HCA_Status))
 
       if self.CP.flags & VolkswagenFlags.STOCK_HCA_PRESENT and self.CCS == mqbcan:
@@ -434,9 +436,7 @@ class CarController(CarControllerBase):
           ea_simulated_torque = CS.out.steeringTorque
         can_sends.append(self.CCS.create_eps_update(self.packer_pt, self.CAN.cam, CS.eps_stock_values, ea_simulated_torque))
 
-    if self.CCS == mlbcan:
-      can_sends.append(mlbcan.create_alc_angle_control(self.packer_pt, self._pt_tx_bus, getattr(self, "mlb_alc_active", False), actuators.steeringAngleDeg))
-    else:
+    if self.CCS != mlbcan:
       iq_lvbs_alc.update_vw_alc(self, CC, CS, actuators, can_sends, apply_torque)
     if self.frame % self.CCP.STEER_STEP == 0:
       iq_lvbs_alc.append_private_apd(self, CC_IQ, can_sends)
