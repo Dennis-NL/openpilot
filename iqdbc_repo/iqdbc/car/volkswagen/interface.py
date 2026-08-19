@@ -187,11 +187,13 @@ class CarInterface(CarInterfaceBase):
         CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
     elif ret.flags & VolkswagenFlags.MLB:
       ret.steerActuatorDelay = 0.2
-      if angle_lat_enabled:
-        ret.steerControlType = structs.CarParams.SteerControlType.angle
-        ret.steerAtStandstill = bool(joystick_mode)
-      else:
-        CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      # Hardcoded on (not gated on the AngleLateralControl param) - this
+      # platform's EPS only accepts steering via the standalone ALC module's
+      # PLA_01 angle tunnel, so torque control is never a real fallback here.
+      # Use the IQ_beta-mlb-long branch instead of this one for normal torque
+      # driving.
+      ret.steerControlType = structs.CarParams.SteerControlType.angle
+      ret.steerAtStandstill = bool(joystick_mode)
     elif ret.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO):
       ret.steerActuatorDelay = 0.3
     else:
