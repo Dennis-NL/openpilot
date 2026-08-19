@@ -4,6 +4,7 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 import sys
 import os
 import math
+import time
 import numpy as np
 import random
 from iqdbc.can import CANPacker
@@ -425,10 +426,11 @@ class CarController(CarControllerBase):
         if self.frame % self.CCP.STEER_STEP == 0:
           try:
             with open("/tmp/mlb_alc_debug.log", "a") as f:
-              f.write(f"{self.frame} mlb_alc_active={self.mlb_alc_active} CC.enabled={CC.enabled} "
+              f.write(f"{time.strftime('%H:%M:%S')} {self.frame} mlb_alc_active={self.mlb_alc_active} CC.enabled={CC.enabled} "
                       f"CC.latActive={CC.latActive} AngleLateralControl={AngleLateralControl} "
                       f"CCS_is_mlbcan={self.CCS == mlbcan} MLB_flag={bool(self.CP.flags & VolkswagenFlags.MLB)} "
-                      f"HCA_Status={self.HCA_Status} steerControlType={self.CP.steerControlType}\n")
+                      f"HCA_Status={self.HCA_Status} steerControlType={self.CP.steerControlType} "
+                      f"steeringAngleDeg={actuators.steeringAngleDeg}\n")
           except Exception:
             pass
         if not self.mlb_alc_active and not (AngleLateralControl and self.CCS in (mqbcan, pqcan, mlbcan)):
