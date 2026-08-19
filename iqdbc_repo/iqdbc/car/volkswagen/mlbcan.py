@@ -29,14 +29,14 @@ def create_alc_angle_control(packer, bus, active, angle_deg):
   # (iqdbc/safety/modes/volkswagen_mlb.h) reads those bits as torque and only
   # treats status 5/7 as a real steer request - with status 8 it sees
   # "torque requested with no steer_req" and silently drops (tx=false) any
-  # frame where that field is non-zero. The angle instead rides in bits
-  # 51-63, which that safety check never inspects. IQ's own private path
+  # frame where that field is non-zero. The angle instead rides in
+  # ALC_Angle_Raw/Sign (bits 51-63), added as real signals in vw_mlb.dbc's
+  # HCA_01 since that safety check never inspects them. IQ's own private path
   # also uses those bits when it sends its own HCA_01, but we fully skip
   # calling it while our own tunnel is active, so there's no collision.
   if not math.isfinite(angle_deg):
     angle_deg = 0.0
   angle_raw = min(int(round(abs(angle_deg) * 10)), 0xFFF) if active else 0
-  sign = 1 if (active and angle_deg < 0) else 0
 
   values = {
     "HCA_01_Status_HCA": ALC_ANGLE_HCA_STATUS if active else ALC_READY_HCA_STATUS,
@@ -44,18 +44,10 @@ def create_alc_angle_control(packer, bus, active, angle_deg):
     "HCA_01_LM_OffSign": 0,
     "HCA_01_Vib_Freq": 18,
     "HCA_01_Sendestatus": 0,
+    "ALC_Angle_Raw": angle_raw,
+    "ALC_Angle_Sign": 1 if (active and angle_deg < 0) else 0,
   }
-  addr, dat, bus = packer.make_can_msg("HCA_01", bus, values)
-  dat = bytearray(dat)
-  dat[6] = (dat[6] & 0x07) | ((angle_raw & 0x1F) << 3)
-  dat[7] = ((angle_raw >> 5) & 0x7F) | (sign << 7)
-
-  msg = packer.dbc.addr_to_msg[addr]
-  sig_checksum = msg.sigs["CHECKSUM"]
-  from iqdbc.can.packer import set_value
-  set_value(dat, sig_checksum, sig_checksum.calc_checksum(addr, sig_checksum, dat))
-
-  return addr, bytes(dat), bus
+  return packer.make_can_msg("HCA_01", bus, values)
 
 
 def create_lka_hud_control(packer, bus, ldw_stock_values, enabled, steering_pressed, hud_alert, hud_control,

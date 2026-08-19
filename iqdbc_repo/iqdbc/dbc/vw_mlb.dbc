@@ -648,6 +648,8 @@ BO_ 294 HCA_01: 8 Frontsensorik
  SG_ HCA_01_Vib_Amp : 36|4@1+ (0.2,0) [0|3] "Unit_NewtoMeter" Vector__XXX
  SG_ EA_Ruckfreigabe : 40|1@1+ (1,0) [0|1] "" Vector__XXX
  SG_ EA_ACC_Wunschgeschwindigkeit : 41|10@1+ (0.32,0) [0|327.04] "Unit_KiloMeterPerHour"  Frontradar
+ SG_ ALC_Angle_Raw : 51|12@1+ (0.1,0) [0|409.5] "Unit_DegreOfArc" Vector__XXX
+ SG_ ALC_Angle_Sign : 63|1@1+ (1,0) [0|1] "" Vector__XXX
 
 BO_ 1811 ISO_ABS_Req: 8 Gateway_D4C7
  SG_ ISO_ABS_Req_Data : 0|64@1+ (1.0,0.0) [0.0|18446744073709551615] ""  ESP_D4
