@@ -4,7 +4,6 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 import sys
 import os
 import math
-import time
 import numpy as np
 import random
 from iqdbc.can import CANPacker
@@ -419,21 +418,14 @@ class CarController(CarControllerBase):
         self.eps_timer_soft_disable_alert = self.hca_frame_timer_running > self.CCP.STEER_TIME_ALERT / DT_CTRL
         self.apply_torque_last = apply_torque
         # This car's EPS doesn't accept the normal torque-based HCA_01 path, so
-        # the desired angle is routed to the standalone ALC panda module instead
-        # via a private HCA_01 status (see mlbcan.create_alc_angle_control),
-        # bypassing iq_lvbs_alc.update_vw_alc() entirely below when active.
+        # MLB always sends its own tunneled HCA_01 instead (never the torque
+        # path below, never iq_lvbs_alc's HCA_01) - status flips between
+        # ALC_ANGLE (8, with an angle) and READY (3, no request) the same way
+        # the normal torque path flips between statuses. See
+        # mlbcan.create_alc_angle_control for why the angle isn't in
+        # HCA_01_LM_Offset/Sign (those are torque-checked by panda safety).
         self.mlb_alc_active = bool(self.CP.flags & VolkswagenFlags.MLB and self.CCS == mlbcan and CC.enabled and CC.latActive)
-        if self.frame % self.CCP.STEER_STEP == 0:
-          try:
-            with open("/tmp/mlb_alc_debug.log", "a") as f:
-              f.write(f"{time.strftime('%H:%M:%S')} {self.frame} mlb_alc_active={self.mlb_alc_active} CC.enabled={CC.enabled} "
-                      f"CC.latActive={CC.latActive} AngleLateralControl={AngleLateralControl} "
-                      f"CCS_is_mlbcan={self.CCS == mlbcan} MLB_flag={bool(self.CP.flags & VolkswagenFlags.MLB)} "
-                      f"HCA_Status={self.HCA_Status} steerControlType={self.CP.steerControlType} "
-                      f"steeringAngleDeg={actuators.steeringAngleDeg}\n")
-          except Exception:
-            pass
-        if not self.mlb_alc_active and not (AngleLateralControl and self.CCS in (mqbcan, pqcan, mlbcan)):
+        if self.CCS != mlbcan and not (AngleLateralControl and self.CCS in (mqbcan, pqcan, mlbcan)):
           can_sends.append(self.CCS.create_hca_steering_control(self.packer_pt, self._pt_tx_bus, output_torque, self.HCA_Status))
 
       if self.CP.flags & VolkswagenFlags.STOCK_HCA_PRESENT and self.CCS == mqbcan:
@@ -442,12 +434,8 @@ class CarController(CarControllerBase):
           ea_simulated_torque = CS.out.steeringTorque
         can_sends.append(self.CCS.create_eps_update(self.packer_pt, self.CAN.cam, CS.eps_stock_values, ea_simulated_torque))
 
-    if getattr(self, "mlb_alc_active", False):
-      # Bypass iq_lvbs_alc entirely for our own angle-tunnel path - it writes
-      # its own HCA_01 with an encoding we don't control (and can't read back
-      # to know what it's doing), which stomped on ours even when we stripped
-      # it from can_sends afterward. Skipping the call outright is cleaner.
-      can_sends.append(mlbcan.create_alc_angle_control(self.packer_pt, self._pt_tx_bus, actuators.steeringAngleDeg))
+    if self.CCS == mlbcan:
+      can_sends.append(mlbcan.create_alc_angle_control(self.packer_pt, self._pt_tx_bus, getattr(self, "mlb_alc_active", False), actuators.steeringAngleDeg))
     else:
       iq_lvbs_alc.update_vw_alc(self, CC, CS, actuators, can_sends, apply_torque)
     if self.frame % self.CCP.STEER_STEP == 0:
