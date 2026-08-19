@@ -4,6 +4,7 @@ Copyright © IQ.Lvbs, apart of Project Teal Lvbs, All Rights Reserved, licensed 
 import sys
 import os
 import math
+import time
 import numpy as np
 import random
 from iqdbc.can import CANPacker
@@ -378,6 +379,15 @@ class CarController(CarControllerBase):
         # request). See mlbcan.create_alc_angle_control for why the angle isn't in
         # HCA_01_LM_Offset/Sign (those are torque-checked by panda safety).
         self.mlb_alc_active = bool(CC.enabled and CC.latActive)
+        try:
+          with open("/tmp/mlb_alc_debug.log", "a") as f:
+            f.write(f"{time.strftime('%H:%M:%S')} {self.frame} mlb_alc_active={self.mlb_alc_active} "
+                    f"CC.enabled={CC.enabled} CC.latActive={CC.latActive} "
+                    f"steeringPressed={CS.out.steeringPressed} steerFaultTemporary={CS.out.steerFaultTemporary} "
+                    f"steerFaultPermanent={CS.out.steerFaultPermanent} steerControlType={self.CP.steerControlType} "
+                    f"steeringAngleDeg={actuators.steeringAngleDeg}\n")
+        except Exception:
+          pass
         can_sends.append(mlbcan.create_alc_angle_control(self.packer_pt, self._pt_tx_bus, self.mlb_alc_active, actuators.steeringAngleDeg))
       else:
         if CC.latActive and not AngleLateralControl:
