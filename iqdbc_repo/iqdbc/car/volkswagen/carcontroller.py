@@ -378,7 +378,7 @@ class CarController(CarControllerBase):
         # Status flips between ALC_ANGLE (8, with an angle) and READY (3, no
         # request). See mlbcan.create_alc_angle_control for why the angle isn't in
         # HCA_01_LM_Offset/Sign (those are torque-checked by panda safety).
-        self.mlb_alc_active = bool(CC.enabled and CC.latActive)
+        self.mlb_alc_active = bool(CC.latActive)
         try:
           with open("/tmp/mlb_alc_debug.log", "a") as f:
             f.write(f"{time.strftime('%H:%M:%S')} {self.frame} mlb_alc_active={self.mlb_alc_active} "
