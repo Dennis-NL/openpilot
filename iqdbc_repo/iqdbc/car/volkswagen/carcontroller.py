@@ -434,7 +434,7 @@ class CarController(CarControllerBase):
           except Exception:
             pass
         if not self.mlb_alc_active and not (AngleLateralControl and self.CCS in (mqbcan, pqcan, mlbcan)):
-          #can_sends.append(self.CCS.create_hca_steering_control(self.packer_pt, self._pt_tx_bus, output_torque, self.HCA_Status))
+          can_sends.append(self.CCS.create_hca_steering_control(self.packer_pt, self._pt_tx_bus, output_torque, self.HCA_Status))
 
       if self.CP.flags & VolkswagenFlags.STOCK_HCA_PRESENT and self.CCS == mqbcan:
         ea_simulated_torque = float(np.clip(apply_torque * 2, -self.CCP.STEER_MAX, self.CCP.STEER_MAX))
