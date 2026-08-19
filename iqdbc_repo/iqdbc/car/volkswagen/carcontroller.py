@@ -419,11 +419,18 @@ class CarController(CarControllerBase):
         self.apply_torque_last = apply_torque
         # This car's EPS doesn't accept the normal torque-based HCA_01 path, so
         # the desired angle is routed to the standalone ALC panda module instead
-        # via a private HCA_01 status (see mlbcan.create_alc_angle_control). The
-        # actual send happens after iq_lvbs_alc.update_vw_alc() below, since that
-        # private hook also queues its own HCA_01 frame this cycle and whichever
-        # one lands last on the wire is what the ALC module ends up seeing.
+        # via a private HCA_01 status (see mlbcan.create_alc_angle_control),
+        # bypassing iq_lvbs_alc.update_vw_alc() entirely below when active.
         self.mlb_alc_active = bool(self.CP.flags & VolkswagenFlags.MLB and self.CCS == mlbcan and CC.enabled and CC.latActive)
+        if self.frame % self.CCP.STEER_STEP == 0:
+          try:
+            with open("/tmp/mlb_alc_debug.log", "a") as f:
+              f.write(f"{self.frame} mlb_alc_active={self.mlb_alc_active} CC.enabled={CC.enabled} "
+                      f"CC.latActive={CC.latActive} AngleLateralControl={AngleLateralControl} "
+                      f"CCS_is_mlbcan={self.CCS == mlbcan} MLB_flag={bool(self.CP.flags & VolkswagenFlags.MLB)} "
+                      f"HCA_Status={self.HCA_Status} steerControlType={self.CP.steerControlType}\n")
+          except Exception:
+            pass
         if not self.mlb_alc_active and not (AngleLateralControl and self.CCS in (mqbcan, pqcan, mlbcan)):
           can_sends.append(self.CCS.create_hca_steering_control(self.packer_pt, self._pt_tx_bus, output_torque, self.HCA_Status))
 
