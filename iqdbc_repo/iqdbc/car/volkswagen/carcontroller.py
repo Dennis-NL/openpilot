@@ -379,9 +379,11 @@ class CarController(CarControllerBase):
         # request). See mlbcan.create_alc_angle_control for why the angle isn't in
         # HCA_01_LM_Offset/Sign (those are torque-checked by panda safety).
         # PQ's reference exits on the EPS's own LH2_PLA_Abbr flag; MLB's EPS
-        # doesn't report an equivalent, so use the real torque sensor instead
-        # (steeringPressed is already this car's STEER_DRIVER_ALLOWANCE, 0.6Nm).
-        self.ALC_driverExit = CS.out.steeringPressed
+        # doesn't report an equivalent, so use the real torque sensor instead.
+        # steeringPressed (0.6Nm) is far too light a touch to exit on - this
+        # needs a deliberate shove, not road camber or a resting hand, so use
+        # a much higher threshold (2.5Nm) of its own.
+        self.ALC_driverExit = abs(CS.out.steeringTorque) > 250
         self.mlb_alc_active = bool(CC.latActive) and not self.ALC_driverExit
         # The ALC module's own state machine spends its first 200ms
         # (VOLKSWAGEN_MLB_PLA_ENTRY_FRAMES in alc.c) holding the live wheel
