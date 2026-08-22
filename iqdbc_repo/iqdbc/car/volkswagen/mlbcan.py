@@ -1,4 +1,3 @@
-import math
 from iqdbc.car.volkswagen.mqbcan import (volkswagen_mqb_meb_checksum, xor_checksum,
                                          acc_control_value as mqb_acc_control_value,
                                          acc_hud_status_value as mqb_acc_hud_status_value,
@@ -34,9 +33,8 @@ def create_alc_angle_control(packer, bus, active, angle_deg):
   # HCA_01 since that safety check never inspects them. IQ's own private path
   # also uses those bits when it sends its own HCA_01, but we fully skip
   # calling it while our own tunnel is active, so there's no collision.
-  if not math.isfinite(angle_deg):
-    angle_deg = 0.0
-  angle_raw = min(int(round(abs(angle_deg) * 10)), 0xFFF) if active else 0
+  # angle_deg is already bounded by MLB_ANGLE_LIMITS.STEER_ANGLE_MAX upstream.
+  angle_raw = int(round(abs(angle_deg) * 10)) if active else 0
 
   values = {
     "HCA_01_Status_HCA": ALC_ANGLE_HCA_STATUS if active else ALC_READY_HCA_STATUS,

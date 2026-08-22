@@ -379,13 +379,26 @@ class CarController(CarControllerBase):
         # request). See mlbcan.create_alc_angle_control for why the angle isn't in
         # HCA_01_LM_Offset/Sign (those are torque-checked by panda safety).
         self.mlb_alc_active = bool(CC.latActive)
+        # The ALC module's own state machine spends its first 200ms
+        # (VOLKSWAGEN_MLB_PLA_ENTRY_FRAMES in alc.c) holding the live wheel
+        # angle rather than reading our requested one - Python can't see
+        # that phase directly (no EPS feedback reaches this side), so track
+        # our own elapsed-time entry window the same way PQ's reference
+        # tracks PLA_entryCounter, and hold the real angle here too until it
+        # matches. Otherwise the rate limiter gets a ~200ms head start on a
+        # target the firmware isn't even listening to yet.
+        self.ALC_entryCounter = min(self.ALC_entryCounter + 1, 32) if self.mlb_alc_active else 0
+        entering = self.ALC_entryCounter < round(0.2 / DT_CTRL)
         # actuators.steeringAngleDeg comes straight out of LatControlAngle's
         # VehicleModel curvature->angle conversion with no smoothing of its
         # own - apply the same jerk/rate-limited ramp PQ/MQB angle cars use
         # before it ever reaches the ALC module. Uses MLB_ANGLE_LIMITS, not
         # the shared PQ/MQB ANGLE_LIMITS - see values.py for why.
-        apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgo,
-                                                   CS.out.steeringAngleDeg, self.mlb_alc_active, self.CCP.MLB_ANGLE_LIMITS)
+        if self.mlb_alc_active and not entering:
+          apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgo,
+                                                     CS.out.steeringAngleDeg, self.mlb_alc_active, self.CCP.MLB_ANGLE_LIMITS)
+        else:
+          apply_angle = CS.out.steeringAngleDeg
         self.apply_angle_last = apply_angle
         can_sends.append(mlbcan.create_alc_angle_control(self.packer_pt, self._pt_tx_bus, self.mlb_alc_active, apply_angle))
       else:
