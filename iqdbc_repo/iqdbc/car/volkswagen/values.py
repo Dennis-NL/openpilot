@@ -80,17 +80,17 @@ class CarControllerParams:
   )
 
   # MLB steers via the standalone ALC module's PLA_01 angle tunnel, not
-  # torque - the EPS executes the commanded angle far more literally than a
-  # torque request a driver can always overpower, and there's no firmware-
-  # side cap on this path (matches the working PQ reference, which also has
-  # none). PQ/MQB's shared ANGLE_LIMITS above (500 deg max, ~500 deg/s rate
-  # at a dead stop) is dangerous here - a real drive produced a genuine
-  # 328 deg commanded/actual swing with nothing to stop it. Same shape,
-  # much tighter numbers, kept separate so PQ/MQB are untouched.
+  # torque. Matches the real openpilot-sp_master_pla PQ reference exactly:
+  # same rate tables, and no max-angle ceiling (that reference's
+  # apply_std_steer_angle_limits takes no LIMITS.STEER_ANGLE_MAX at all -
+  # only rate limiting). Our shared AngleSteeringLimits still requires a
+  # value, so this uses 409.5 deg, ALC_Angle_Raw's own DBC range ([0|409.5]),
+  # which is as close to "no ceiling" as the signal itself allows. Kept
+  # separate from the shared ANGLE_LIMITS above so PQ/MQB are untouched.
   MLB_ANGLE_LIMITS: AngleSteeringLimits = AngleSteeringLimits(
-    90,  # deg
-    ([0., 5., 15.], [2.5, 1.0, 0.3]),
-    ([0., 5., 15.], [4.0, 2.0, 0.5]),
+    409.5,  # deg - ALC_Angle_Raw's own DBC max, not an arbitrary cap
+    ([0., 5., 15.], [10., 1.6, 0.3]),
+    ([0., 5., 15.], [10., 7.0, 0.8]),
   )
 
   STEER_STEP = 2                           # HCA_01/HCA_1 message frequency 50Hz
