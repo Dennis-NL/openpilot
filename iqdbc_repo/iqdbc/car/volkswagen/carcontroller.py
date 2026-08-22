@@ -394,11 +394,13 @@ class CarController(CarControllerBase):
         # own - apply the same jerk/rate-limited ramp PQ/MQB angle cars use
         # before it ever reaches the ALC module. Uses MLB_ANGLE_LIMITS, not
         # the shared PQ/MQB ANGLE_LIMITS - see values.py for why.
-        if self.mlb_alc_active and not entering:
-          apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgo,
-                                                     CS.out.steeringAngleDeg, self.mlb_alc_active, self.CCP.MLB_ANGLE_LIMITS)
-        else:
-          apply_angle = CS.out.steeringAngleDeg
+        # active/inactive is decided right here, same as PQ's reference ternary
+        # (apply_angle = <rate-limited> if latActive and status==active else
+        # CSsteeringAngleDegLast) - lat_active is always True on this call
+        # since we're already inside the "should ramp" branch.
+        apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgo,
+                                                   CS.out.steeringAngleDeg, True, self.CCP.MLB_ANGLE_LIMITS) \
+          if self.mlb_alc_active and not entering else CS.out.steeringAngleDeg
         self.apply_angle_last = apply_angle
         can_sends.append(mlbcan.create_alc_angle_control(self.packer_pt, self._pt_tx_bus, self.mlb_alc_active, apply_angle))
       else:
