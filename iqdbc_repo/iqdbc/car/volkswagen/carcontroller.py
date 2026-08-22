@@ -398,12 +398,7 @@ class CarController(CarControllerBase):
         # (apply_angle = <rate-limited> if latActive and status==active else
         # CSsteeringAngleDegLast) - lat_active is always True on this call
         # since we're already inside the "should ramp" branch.
-        # TEMP: this car's wheel sits ~1deg off-center in real driving, and it
-        # hugs the right side of the lane as a result - hardcode a correction
-        # instead of waiting for liveParameters.angleOffsetDeg to converge.
-        # Confirmed by testing: +1.0, not -1.0.
-        target_angle_deg = actuators.steeringAngleDeg + 1.0
-        apply_angle = apply_std_steer_angle_limits(target_angle_deg, self.apply_angle_last, CS.out.vEgo,
+        apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgo,
                                                    CS.out.steeringAngleDeg, True, self.CCP.MLB_ANGLE_LIMITS) \
           if self.mlb_alc_active and not entering else CS.out.steeringAngleDeg
         self.apply_angle_last = apply_angle
