@@ -186,7 +186,12 @@ class CarInterface(CarInterfaceBase):
       else:
         CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
     elif ret.flags & VolkswagenFlags.MLB:
-      ret.steerActuatorDelay = 0.2
+      # Measured, not inherited from torque steering: cross-correlated HCA_01
+      # (commanded) against LWI_01 (real wheel) from a joystick test capture,
+      # peak correlation at a 280ms lag - the ALC module's state machine, PLA_01
+      # relay, and the EPS's own PLA response add real delay beyond a normal
+      # torque-EPS car's ~0.2s.
+      ret.steerActuatorDelay = 0.28
       # Hardcoded on (not gated on the AngleLateralControl param) - this
       # platform's EPS only accepts steering via the standalone ALC module's
       # PLA_01 angle tunnel, so torque control is never a real fallback here.
