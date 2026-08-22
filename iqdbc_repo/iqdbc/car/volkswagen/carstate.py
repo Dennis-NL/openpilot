@@ -40,6 +40,7 @@ class CarState(CarStateBase):
     self.eps_init_complete = False
     self.CCP = CarControllerParams(CP)
     self.button_states = {button.event_type: False for button in self.CCP.BUTTONS}
+    self.mlb_hauptschalter_last = None
     self.esp_hold_confirmation = False
     self.upscale_lead_car_signal = False
     self.eps_stock_values = False
@@ -734,6 +735,20 @@ class CarState(CarStateBase):
     self._update_odometer(ret, br_cp.vl["Kombi_02"]["KBI_Kilometerstand"])
 
     ret.buttonEvents = self.create_button_events(pt_cp, self.CCP.BUTTONS)
+    # LS_Hauptschalter only feeds cruiseState.available (a level), unlike
+    # MEB/MQB_EVO which remap their main switch onto an actual cancel button
+    # (see update_meb's BUTTONS_ALT) so flipping it fires the same USER_DISABLE
+    # path as a button press. Mirror that here with a private edge tracker -
+    # LS_Abbrechen already owns button_states[cancel], so this can't just be
+    # another Button() entry without colliding with it.
+    if self.mlb_hauptschalter_last is None:
+      self.mlb_hauptschalter_last = cruise_main_switch
+    elif cruise_main_switch != self.mlb_hauptschalter_last:
+      event = structs.CarState.ButtonEvent()
+      event.type = ButtonType.cancel
+      event.pressed = not cruise_main_switch
+      ret.buttonEvents = list(ret.buttonEvents) + [event]
+      self.mlb_hauptschalter_last = cruise_main_switch
 
     ret.cruiseState.standstill = self.CP.pcmCruise and self.esp_hold_confirmation
     ret.standstill = ret.vEgoRaw == 0
