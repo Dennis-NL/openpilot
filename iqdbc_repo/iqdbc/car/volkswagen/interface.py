@@ -198,7 +198,11 @@ class CarInterface(CarInterfaceBase):
       # Use the IQ_beta-mlb-long branch instead of this one for normal torque
       # driving.
       ret.steerControlType = structs.CarParams.SteerControlType.angle
-      ret.steerAtStandstill = bool(joystick_mode)
+      # PQ's reference doesn't need this (it has no standalone bench-test rig
+      # for the ALC module), but ours does: without it, CC.latActive - and so
+      # HCA_01 status 8 - never fires below minSteerSpeed (0.4 m/s), so the
+      # module can't be exercised while stationary.
+      ret.steerAtStandstill = True
       # iqmodeld's own desiredCurvature is unsmoothed at low speed (clip_curvature's
       # jerk limit divides by vEgo^2, so it's inert below a few km/h) and the ALC
       # module's rate limiter alone can't fix noise at the source - turn on the
