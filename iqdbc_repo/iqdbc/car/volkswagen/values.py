@@ -79,6 +79,20 @@ class CarControllerParams:
     MAX_ANGLE_RATE=5,  # deg/20ms frame
   )
 
+  # MLB steers via the standalone ALC module's PLA_01 angle tunnel, not
+  # torque - the EPS executes the commanded angle far more literally than a
+  # torque request a driver can always overpower, and there's no firmware-
+  # side cap on this path (matches the working PQ reference, which also has
+  # none). PQ/MQB's shared ANGLE_LIMITS above (500 deg max, ~500 deg/s rate
+  # at a dead stop) is dangerous here - a real drive produced a genuine
+  # 328 deg commanded/actual swing with nothing to stop it. Same shape,
+  # much tighter numbers, kept separate so PQ/MQB are untouched.
+  MLB_ANGLE_LIMITS: AngleSteeringLimits = AngleSteeringLimits(
+    90,  # deg
+    ([0., 5., 15.], [2.5, 1.0, 0.3]),
+    ([0., 5., 15.], [4.0, 2.0, 0.5]),
+  )
+
   STEER_STEP = 2                           # HCA_01/HCA_1 message frequency 50Hz
   ACC_CONTROL_STEP = 2                     # ACC_06/ACC_07/ACC_System frequency 50Hz
   AEB_CONTROL_STEP = 2                     # ACC_10 frequency 50Hz
