@@ -34,15 +34,15 @@ def create_alc_angle_control(packer, bus, active, angle_deg):
   # also uses those bits when it sends its own HCA_01, but we fully skip
   # calling it while our own tunnel is active, so there's no collision.
   # angle_deg is already bounded by MLB_ANGLE_LIMITS.STEER_ANGLE_MAX upstream.
-  angle_raw = int(round(abs(angle_deg) * 10)) if active else 0
-
+  # The packer applies ALC_Angle_Raw's own DBC factor (0.1) automatically -
+  # no manual scaling needed, same as PQ passes apply_angle straight in.
   values = {
     "HCA_01_Status_HCA": ALC_ANGLE_HCA_STATUS if active else ALC_READY_HCA_STATUS,
     "HCA_01_LM_Offset": 0,
     "HCA_01_LM_OffSign": 0,
     "HCA_01_Vib_Freq": 18,
     "HCA_01_Sendestatus": 0,
-    "ALC_Angle_Raw": angle_raw,
+    "ALC_Angle_Raw": abs(angle_deg) if active else 0,
     "ALC_Angle_Sign": 1 if (active and angle_deg < 0) else 0,
   }
   return packer.make_can_msg("HCA_01", bus, values)
