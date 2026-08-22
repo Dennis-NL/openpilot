@@ -15,10 +15,6 @@ def create_hca_steering_control(packer, bus, apply_steer, HCA_Status):
   return packer.make_can_msg("HCA_01", bus, values)
 
 
-ALC_ANGLE_HCA_STATUS = 8
-ALC_READY_HCA_STATUS = 3
-
-
 def create_alc_angle_control(packer, bus, active, angle_deg):
   # Private tunnel to the standalone ALC panda module, sent every cycle just
   # like the normal torque path (status changes, the message never stops).
@@ -37,7 +33,7 @@ def create_alc_angle_control(packer, bus, active, angle_deg):
   # The packer applies ALC_Angle_Raw's own DBC factor (0.1) automatically -
   # no manual scaling needed, same as PQ passes apply_angle straight in.
   values = {
-    "HCA_01_Status_HCA": ALC_ANGLE_HCA_STATUS if active else ALC_READY_HCA_STATUS,
+    "HCA_01_Status_HCA": 8 if active else 3,
     "HCA_01_LM_Offset": 0,
     "HCA_01_LM_OffSign": 0,
     "HCA_01_Vib_Freq": 18,
