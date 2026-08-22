@@ -64,9 +64,11 @@ class CarControllerParams:
   ANGLE_LIMITS: AngleSteeringLimits = AngleSteeringLimits(
     # Max Steering Angle Allowed
     500,  # deg
-    # Volkswagen uses a vehicle model
-    ([], []),
-    ([], []),
+    # deg/frame rate caps by speed (m/s) - nearly unrestricted at a dead
+    # stop for parking-style maneuvers, tightening fast as soon as the car
+    # actually starts rolling.
+    ([0., 5., 15.], [10., 1.6, 0.3]),
+    ([0., 5., 15.], [10., 7.0, 0.8]),
 
     # Vehicle Model Angle Limits
     # Add extra tolerance for average banked road since safety doesn't have the roll calculation
@@ -697,7 +699,10 @@ class CAR(Platforms):
   )
   AUDI_Q5_MK1 = VolkswagenMLBPlatformConfig(
     [VWCarDocs("Audi Q5 2013-17")],
-    VolkswagenCarSpecs(mass=1895, wheelbase=2.81),
+    # steerRatio: unset before, silently inheriting the generic VW default
+    # (18.4). Every other VW/PQ/MEB/MLB entry has its own calibrated value;
+    # borrowing PORSCHE_MACAN_MK1's 16.2 - same MLB platform/rack family.
+    VolkswagenCarSpecs(mass=1895, wheelbase=2.81, steerRatio=16.2),
     chassis_codes={"8R"},
     wmis={WMI.AUDI_EUROPE_MPV, WMI.AUDI_GERMANY_CAR},
   )

@@ -9,7 +9,7 @@ import numpy as np
 import random
 from iqdbc.can import CANPacker
 from iqdbc.car import Bus, DT_CTRL, make_tester_present_msg, structs
-from iqdbc.car.lateral import apply_driver_steer_torque_limits, apply_steer_angle_limits_simple
+from iqdbc.car.lateral import apply_driver_steer_torque_limits, apply_steer_angle_limits_simple, apply_std_steer_angle_limits
 from iqdbc.car.lateral import apply_std_curvature_limits
 from iqdbc.car.common.conversions import Conversions as CV
 from iqdbc.car.common.numpy_fast import clip, interp
@@ -379,16 +379,14 @@ class CarController(CarControllerBase):
         # request). See mlbcan.create_alc_angle_control for why the angle isn't in
         # HCA_01_LM_Offset/Sign (those are torque-checked by panda safety).
         self.mlb_alc_active = bool(CC.latActive)
-        try:
-          with open("/tmp/mlb_alc_debug.log", "a") as f:
-            f.write(f"{time.strftime('%H:%M:%S')} {self.frame} mlb_alc_active={self.mlb_alc_active} "
-                    f"CC.enabled={CC.enabled} CC.latActive={CC.latActive} "
-                    f"steeringPressed={CS.out.steeringPressed} steerFaultTemporary={CS.out.steerFaultTemporary} "
-                    f"steerFaultPermanent={CS.out.steerFaultPermanent} steerControlType={self.CP.steerControlType} "
-                    f"steeringAngleDeg={actuators.steeringAngleDeg}\n")
-        except Exception:
-          pass
-        can_sends.append(mlbcan.create_alc_angle_control(self.packer_pt, self._pt_tx_bus, self.mlb_alc_active, actuators.steeringAngleDeg))
+        # actuators.steeringAngleDeg comes straight out of LatControlAngle's
+        # VehicleModel curvature->angle conversion with no smoothing of its
+        # own - apply the same jerk/rate-limited ramp PQ/MQB angle cars use
+        # before it ever reaches the ALC module.
+        apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgo,
+                                                   CS.out.steeringAngleDeg, self.mlb_alc_active, self.CCP.ANGLE_LIMITS)
+        self.apply_angle_last = apply_angle
+        can_sends.append(mlbcan.create_alc_angle_control(self.packer_pt, self._pt_tx_bus, self.mlb_alc_active, apply_angle))
       else:
         if CC.latActive and not AngleLateralControl:
           torque_scale = self._get_mqb_steering_torque_scale(CS.out.vEgo, iq_mqb_steering_lockout)
