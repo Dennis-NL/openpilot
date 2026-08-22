@@ -199,7 +199,7 @@ class CarInterface(CarInterfaceBase):
       # module's rate limiter alone can't fix noise at the source - turn on the
       # model's adaptive smoothing so a noisy/uncertain plan doesn't reach HCA_01.
       _params.put_bool("ModelSmoothingEnabled", True)
-      _params.put("ModelLatSmoothSec", "30")
+      _params.put_int("ModelLatSmoothSec", 30)
     elif ret.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO):
       ret.steerActuatorDelay = 0.3
     else:
