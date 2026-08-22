@@ -83,14 +83,16 @@ class CarControllerParams:
   # torque. No max-angle ceiling (409.5 deg is ALC_Angle_Raw's own DBC
   # range, as close to "no ceiling" as the signal allows). Rate table
   # diverges from the real PQ reference at low/mid speed - felt too weak
-  # there in testing - raised the 5m/s point; watch for the wheel-wag
-  # oscillation the steerActuatorDelay/rate tuning earlier fixed if this
-  # turns out to be too much. Kept separate from ANGLE_LIMITS above so
-  # PQ/MQB are untouched.
+  # there in testing, and OP was throwing steerSaturated ("Turn Exceeds
+  # Steering Limit") around 40kph - raised the 15m/s point too so the
+  # 18-90kph interpolation doesn't sag as hard through that range. Watch
+  # for the wheel-wag oscillation the steerActuatorDelay/rate tuning
+  # earlier fixed if this turns out to be too much. Kept separate from
+  # ANGLE_LIMITS above so PQ/MQB are untouched.
   MLB_ANGLE_LIMITS: AngleSteeringLimits = AngleSteeringLimits(
     409.5,  # deg - ALC_Angle_Raw's own DBC max, not an arbitrary cap
-    ([0., 5., 15.], [10., 3.0, 0.5]),
-    ([0., 5., 15.], [10., 8.0, 1.0]),
+    ([0., 5., 15.], [10., 3.0, 1.2]),
+    ([0., 5., 15.], [10., 8.0, 2.0]),
   )
 
   STEER_STEP = 2                           # HCA_01/HCA_1 message frequency 50Hz
