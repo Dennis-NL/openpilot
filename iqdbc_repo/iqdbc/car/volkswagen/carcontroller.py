@@ -378,7 +378,11 @@ class CarController(CarControllerBase):
         # Status flips between ALC_ANGLE (8, with an angle) and READY (3, no
         # request). See mlbcan.create_alc_angle_control for why the angle isn't in
         # HCA_01_LM_Offset/Sign (those are torque-checked by panda safety).
-        self.mlb_alc_active = bool(CC.latActive)
+        # PQ's reference exits on the EPS's own LH2_PLA_Abbr flag; MLB's EPS
+        # doesn't report an equivalent, so use the real torque sensor instead
+        # (steeringPressed is already this car's STEER_DRIVER_ALLOWANCE, 0.6Nm).
+        self.ALC_driverExit = CS.out.steeringPressed
+        self.mlb_alc_active = bool(CC.latActive) and not self.ALC_driverExit
         # The ALC module's own state machine spends its first 200ms
         # (VOLKSWAGEN_MLB_PLA_ENTRY_FRAMES in alc.c) holding the live wheel
         # angle rather than reading our requested one - Python can't see
